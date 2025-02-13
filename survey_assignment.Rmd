@@ -8,8 +8,16 @@ date: "2025-02-13"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+## Loading libraries
 ```{r}
 library(tidyverse)
 library(tidyr)
+library(haven)
+```
+
+
+## Loading data
+```{r}
+data_raw <- read_dta("ZA7575.dta")
 ```
 
