@@ -8,3 +8,8 @@ date: "2025-02-13"
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+library(tidyverse)
+library(tidyr)
+```
+
