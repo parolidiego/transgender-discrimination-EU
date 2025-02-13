@@ -21,3 +21,4 @@ library(haven)
 data_raw <- read_dta("ZA7575.dta")
 ```
 
+## Data cleaning
