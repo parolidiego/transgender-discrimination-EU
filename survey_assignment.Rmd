@@ -13,12 +13,82 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(tidyr)
 library(haven)
+library(readxl)
+library(xml2)
+library(rvest)
+library(janitor)
 ```
 
-
 ## Loading data
+
+### Survey data
 ```{r}
 data_raw <- read_dta("ZA7575.dta")
 ```
 
+### GDP per capita
+Retrieved from Eurostat for the year 2019 (https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en).
+```{r}
+gdp_data <- read_xlsx("gdp_pc_2019.xlsx", sheet = 3, range = "A11:B39", col_names = c("country", "gdp_pc"))
+head(gdp_data)
+```
+----- United Kingdom is missing from this dataset as well as from a few others in Eurostat (we might have to find it somewhere else).
+
+### Rural population
+Retrieved from the World Bank (https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS). Data on the % of population living in rural areas.
+```{r}
+rural_data <- read_xls("rural_pop.xls", sheet = 1, range = "A4:BL270")
+
+rural_data <- rural_data |> 
+  select(`Country Name`, `Country Code`, `2019`) |> 
+  clean_names() |> 
+  rename("rural_pop_percentage" = "x2019")
+
+# select European countries
+codelist <- countrycode::codelist |> 
+  select(country.name.en, cow.name, eu28, iso.name.en, iso3c, un.name.en) |> # selecting variables that might be useful for joins (will probably have to clean later on)
+  filter(!is.na(eu28)) # including the countries that belonged to the EU in 2019 which are listed under Q1 of the questionnaire
+
+rural_data <- rural_data |> 
+  inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+```
+
+### Same sex unions
+Retrieved from Wikipedia.
+```{r}
+link <- "https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe"
+html_website <- link |> read_html()
+all_tables <- html_website|> html_table()
+marriage_data <- all_tables[[4]]
+marriage_data <- marriage_data |> select(Status, Country)
+
+# cleaning the status column
+marriage_data$Status <- sub("\\s*\\(.*|\\s*-.*", "", marriage_data$Status)
+unique(marriage_data$Status)
+
+# cleaning the country column
+marriage_data <- marriage_data |> 
+  mutate(Country = str_replace_all(Country, c("\\*" = "", "†" = "", "\\[.*?\\]" = ""))) |> 
+  mutate(Country = trimws(Country))
+unique(marriage_data$Country)
+
+# getting rid of the total and subtotal rows
+marriage_data <- marriage_data |> 
+  filter(!Status %in% c("Total", "Subtotal"))
+
+# again keeping only the countries that appear in the questionnaire
+marriage_data <- marriage_data |> 
+  inner_join(select(codelist, cow.name), by = c("Country" = "cow.name"))
+```
+This variable could be recoded as either ordinal, categorical (both factor) or logical.
+
+
+------- The dataset has 32 observations instead of 28 (EU-28 countries). According to this test, Croatia, Hungary, Latvia and Slovakia have two different types of status, so maybe we should cross-check with other sources?
+```{r}
+marriage_data |> 
+  add_count(Country) |> 
+  filter(n > 1)
+```
+
 ## Data cleaning
+
