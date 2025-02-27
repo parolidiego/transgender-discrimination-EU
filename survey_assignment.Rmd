@@ -90,5 +90,46 @@ marriage_data |>
   filter(n > 1)
 ```
 
+### Gender Equality Index
+Developed by the European Institute for Gender Equality. Retrieved from https://eige.europa.eu/gender-statistics/dgs/indicator/index_data__index_scores/datatable for the year 2019.
+
+```{r}
+gequality_index <- read_xlsx("gender_equality_index_scores.xlsx", range = "A16:V44")
+names(gequality_index) <- names(gequality_index) %>%
+ janitor::make_clean_names() %>%
+  gsub("_score$", "", .)
+names(gequality_index)
+
+gequality_index <- gequality_index |>  
+  rename(country_name = geographic_region_sub_domain_scores)
+```
+###Democracy Index
+Using the Economist's Democracy Index (there might be a better one?).
+
+```{r}
+democracy_index <- read_xlsx("EIU_democracy_index.xlsx", sheet = 4)
+
+# the ISO codes were lowercase which impedes the join
+democracy_index$geo <- toupper(democracy_index$geo)
+
+# filter for 2019 and EU28 countries
+democracy_index <- democracy_index |> 
+  filter(time == 2019) |> 
+  inner_join((select(codelist, iso3c)), by = c("geo" = "iso3c"))
+
+# clean var names
+names(democracy_index) <- names(democracy_index) %>%
+ janitor::make_clean_names() %>%
+  gsub("_eiu$", "", .)
+
+names(democracy_index)
+
+democracy_index <- democracy_index |> 
+  rename(country_code = geo,
+         country_name = name,
+         year = time)
+```
+In both of these tables (Gender Equality and Democracy indexes) there are more indicators apart from the overall indexes, we have to decide if we think they're useful or if we can discard some/all of them.
+
 ## Data cleaning
 
