@@ -253,6 +253,58 @@ interview, respondent cooperation, location vars, interviewer number.
 
 Select and rename these key variables:
 
+
+```{r}
+
+# SELECTION DONE TOGETHER needs cleaning
+data_raw |> 
+  select(country,
+         age
+         q1, # maybe for non-eu immigrants
+         d70,
+         d71,
+         sd1,
+         sd2,
+         sd3,
+         qc1,
+         qc2,
+         qc3,#maybe for discrimination in public spaces
+         qc4,
+         qc5,
+         qc6,
+         qc7,
+         #qc8 about roma
+         qc9,
+         qc10,
+         qc11,
+         qc12,
+         qc13,
+         #qc14 roma specific again
+         qc15,
+         #qc16 roma specifica again
+         qc17,
+         qc18,
+         qc19,
+         qc20,
+         d1,
+         d7,
+         d10,
+         d8,
+         d15a,
+         d15b #???
+         d25,
+         d43b,
+         d60,
+         d62,
+         d63,
+         d72,
+         sc4 # maybe keep to see if people are being honest
+         # add all the p?
+         
+         
+         )
+```
+
 ```{r}
 individuals_df <- data_raw |> 
   
