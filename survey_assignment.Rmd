@@ -1,7 +1,9 @@
 ---
 title: "Survey II Assignment"
-output: html_document
-date: "2025-02-13"
+author: "..."
+output: 
+  html_document:
+    toc: true
 editor_options: 
   markdown: 
     wrap: 72
@@ -13,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Loading libraries
 
-```{r}
+```{r, message = FALSE}
 rm(list = ls())
 library(tidyverse)
 library(haven)
@@ -23,6 +25,7 @@ library(rvest)
 library(janitor)
 library(DataExplorer)
 library(countrycode)
+library(explore)
 ```
 
 # Loading data
@@ -92,13 +95,11 @@ marriage_data <- read_html("https://en.wikipedia.org/wiki/Recognition_of_same-se
 marriage_data <- marriage_data |> 
   mutate(Status = str_remove(Status, "\\s*\\(.*|\\s*-.*")) |> 
   filter(!Status %in% c("Total", "Subtotal"))
-unique(marriage_data$Status)
 
 # cleaning the country column
 marriage_data <- marriage_data |> 
   mutate(Country = str_replace_all(Country, c("\\*" = "", "†" = "", "\\[.*?\\]" = ""))) |> 
   mutate(Country = trimws(Country))
-unique(marriage_data$Country)
 
 # keeping only eu-28 countries 
 marriage_data <- marriage_data |> 
@@ -130,7 +131,6 @@ gequality_index <- read_xlsx("gender_equality_index_scores.xlsx", range = "A16:V
 names(gequality_index) <- names(gequality_index) %>%
   janitor::make_clean_names() %>%
   gsub("_score$", "", .)
-names(gequality_index)
 
 gequality_index <- gequality_index |>  
   rename(country_name = geographic_region_sub_domain_scores)
@@ -157,27 +157,27 @@ names(democracy_index) <- names(democracy_index) %>%
   janitor::make_clean_names() %>%
   gsub("_eiu$", "", .)
 
-names(democracy_index)
-
 democracy_index <- democracy_index |> 
   rename(country_code = geo,
          country_name = name,
          year = time)
+
+str(democracy_index)
 ```
 
 In both of these tables (Gender Equality and Democracy indexes) there
 are more indicators apart from the overall indexes, we have to decide if
 we think they're useful or if we can discard some/all of them.
 
-## Data cleaning
+# Data cleaning
 
-### Selecting relevant variables in the survey data
+## Selecting relevant variables in the survey data
 
 ```{r}
 data <- data_raw |> 
   select(serialid, # unique identifier
          isocntry, # 2 digit country code
-         starts_with("d11"), # age which one should we keep?
+         starts_with("d11"), # age variables
          starts_with("q1"), # nationality of interviewee. options given: EU28+Other+DK
          d70, #life satisfaction
          starts_with("d71"), # interest in politics
@@ -228,9 +228,10 @@ paradata <- data_raw |>
   )
 ```
 
-### Check overall data quality
+## Check overall data quality
 
 ```{r}
+explore_tbl(data)
 plot_intro(data)
 ```
 
@@ -241,18 +242,32 @@ data |>
   select(where(~ !is.numeric(.)))
 ```
 
+Most columns do not have explicit NAs
+
+```{r}
+plot_missing(data)
+names(which(colSums(is.na(data)) > 0))
+```
+
+Exploiting the fact that the .dta files has attributes (labels) for all its columns.
+
+If we search for `attr(colname, "label")` you get back the original long name of the variable 
+
+If we instead search for `attr(colname, "labels")` you get back all the possible encoding levels of the variable (ex.1,2,3,4 etc.) and by doing `names(attr(colname, "labels"))` you get back the actual meaning of those numbers (ex. 1 = "Yes", 2 = "No", etc.)
 
 ```{r}
 # Extracting all the full names of the columns
-# They might be useful to rename the variables systematically
 variable_names <- tibble(
   var_code = names(data),
   var_full_name = sapply(data, function(col) attr(col, "label")))
-head(variable_names)
+variable_names
 ```
 
+These long names df might be useful to rename the variables systematically all together. Remember in case we filter out variables after this code chunk and in case we use this df to rename variables that there might be disalignments. 
+
+Will now look into the labels for the different levels that our factor variables can take:
+
 ```{r}
-# Trying to automatize the cleaning by extracting the labels and their respective names for each column
 attr(data$d11r1, "labels")
 names(attr(data$d11r1, "labels"))
 tibble(name_labels = names(attr(data$d11r1, "labels")),
@@ -275,14 +290,11 @@ list_label_tibbles <- setNames(list_label_tibbles, names(data))
 
 # For example
 list_label_tibbles$d11r1
-# Right column is what it appears in our data (as a number)
-# Left column is the label that we must assign to that number when we factorize
-
-# # Remove NULL elements (columns without labels)
-# list_label_tibbles <- list_label_tibbles[!sapply(list_label_tibbles, is.null)]
 ```
 
-### Start cleaning
+Right column is what it appears in our data (as a number). Left column is the label that we must assign to that number when we factorize
+
+## Start cleaning
 
 ```{r}
 # Recoding together Germany East and West because we are running analysis at the country level
@@ -294,6 +306,8 @@ data <- data |>
 # We might want to join the full name of the countries using the codelist df
 ```
 
+Separating variables for which I can use the attribute labels to factorize them and the variables for which this strategy cannot be used
+
 ```{r}
 non_factor_variables <- c("serialid", "isocntry", "d11", 
                           names(data)[startsWith(names(data), "q1_")],
@@ -302,16 +316,56 @@ non_factor_variables <- c("serialid", "isocntry", "d11",
                           names(data)[startsWith(names(data), "qc4_")],
                           "d8", "opls")
 factor_variables <- setdiff(names(data), non_factor_variables)
+```
 
+The factors variables will be cleaned below
+
+The rest of the variables:
+
+`serialid` does not need any cleaning
+
+`isocntry` does not need any further cleaning
+
+`d11` does not need any further cleaning
+
+`q1_n` are dummy variables for nationality, but one can have more than one nationality so I don't know how to clean those variables. Probably better to discard them all or to just use them for creating a variable for being a foreigner from outside of the EU (`q1_29`)
+
+`sd2_n` again are dummies for whether you consider yourself to be a part of different minorities. One can fit into multiple categories tho. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is also worth considering to remove `sd2_7` to `sd2_10` and `sd2t`
+
+`qc2_n` are dummies for whether you have experienced discrimination on the basis of different reasons. Same here, one can have experienced discrimination because of more than one reason, multiple options are allowed. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is worth considering to remove `qc2_14` to `qc2_16`
+
+`qc4_n` are dummies for whether you think people would be disadvantaged during the recruitment process for being a minority. Same here, one can have experienced disadvantages because of more than one reason, multiple options are allowed. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is probably worth removing `qc4_16` to `qc4_18` and consider whether to use or not `qc4t_1` `qc4t_2` `qc4t_3`
+
+`d8` does not need any cleaning
+
+`opls` does not need any cleaning. In case we want to use it, it needs to be factorized and we should consider assigning to it decent labels. 1 is a person that talks often about his opinion while 4 is a person that does not.
+
+I now proceed to factorize and assign labels to all those variables for which within the attributes of the dataframe there were meaningful labels.
+
+```{r}
+# Converting them to factors and assign them their labels automatically
 data <- data |> 
   mutate(across(all_of(factor_variables), labelled::to_factor))
 
+# Turning DK into NAs for all the factor variables
 data <- data |> 
   mutate(across(all_of(factor_variables), ~ fct_na_level_to_value(., extra_levels = "DK")))
 
+# Converting to numeric the variables that should be numeric
+# They are already numeric but they carry with them some labels as well that only confuse us, by doing this I remove the labels
+data <- data |> 
+  mutate(d11 = as.numeric(d11),
+         d8 = as.numeric(d8))
+```
 
-# q1_ needs some other encoding ????
-# check d15b
+We should be checking whether there are other levels for different variables that need special treatments (such as refuse to respond, should we turn those into NAs?). We can do this by looking at the summary below
+
+So this is our situation so far:
+
+```{r}
+head(data)
+summary(data)
+plot_missing(data)
 ```
 
 
@@ -368,61 +422,45 @@ interview, respondent cooperation, location vars, interviewer number.
 Select and rename these key variables:
 
 ```{r}
-individuals_df <- data_raw |> 
-  
-  #use select function and rename all the in scope variables 
-  select(
-      uniqid, 
-      isocntry,
-      countryid,
-      country_names,
-        
-    
-      target_var = qc19,
-      
-    # socioeconomic variables for individuals 
-      gender = d10,
-      age = d11,
-      age_4cat = d11r1,
-      age_6cat = d11r2,
-      age_7cat = d11r3,
-      polit_ideology = d1,
-      educ_5cat = d8r2, # all the education vars have low cutoffs 
-      educ_11cat = d8r1,
-      lifesat = d70,
-      religion = sd3, 
-      class = d63,
-      occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
-      financialstress = d60, #difficulty paying bills
-      polintr, # no need to rename political interest var
-      
-    # paradata variables   
-      int_date = p1,
-      int_time = p2,
-      int_length = p3r, #using recoded var instead of base p3 
-      int_ppl_present = p4,
-      int_resp_coop = p5,
-      int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
-      #p7 not useful, location, no data for p8-11
-      
-      #p13 is language of interview. Probably not useful? 
-      )
-
-```
-
-Misc code for checking the sociodemographic vars (to be deleted)
-
-```{r}
-#check repeated cols
-data_raw |> 
-  select(starts_with("p13"))
-
-# check labels
-attr(data_raw$d15a_r2, "labels")
-attr(data_raw$d7r, "labels")
-
-#check values
-summary(data_raw$p9)
+# individuals_df <- data_raw |> 
+#   
+#   #use select function and rename all the in scope variables 
+#   select(
+#       uniqid, 
+#       isocntry,
+#       countryid,
+#       country_names,
+#         
+#     
+#       target_var = qc19,
+#       
+#     # socioeconomic variables for individuals 
+#       gender = d10,
+#       age = d11,
+#       age_4cat = d11r1,
+#       age_6cat = d11r2,
+#       age_7cat = d11r3,
+#       polit_ideology = d1,
+#       educ_5cat = d8r2, # all the education vars have low cutoffs 
+#       educ_11cat = d8r1,
+#       lifesat = d70,
+#       religion = sd3, 
+#       class = d63,
+#       occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
+#       financialstress = d60, #difficulty paying bills
+#       polintr, # no need to rename political interest var
+#       
+#     # paradata variables   
+#       int_date = p1,
+#       int_time = p2,
+#       int_length = p3r, #using recoded var instead of base p3 
+#       int_ppl_present = p4,
+#       int_resp_coop = p5,
+#       int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
+#       #p7 not useful, location, no data for p8-11
+#       
+#       #p13 is language of interview. Probably not useful? 
+#       )
 
 ```
 
