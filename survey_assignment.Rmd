@@ -11,11 +11,11 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Loading libraries
+# Loading libraries
 
 ```{r}
+rm(list = ls())
 library(tidyverse)
-library(tidyr)
 library(haven)
 library(readxl)
 library(xml2)
@@ -23,66 +23,75 @@ library(rvest)
 library(janitor)
 library(DataExplorer)
 library(countrycode)
-
 ```
 
-## Loading data
+# Loading data
 
-### Survey data
+## Survey data
 
 ```{r}
 data_raw <- read_dta("ZA7575.dta")
 ```
 
+## Country-level data
+
 ### GDP per capita
 
-Retrieved from Eurostat for the year 2019
-(<https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en>).
+Retrieved from Eurostat (<https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en>) for the year 2019.
 
 ```{r}
 gdp_data <- read_xlsx("gdp_pc_2019.xlsx", sheet = 3, range = "A11:B39", col_names = c("country", "gdp_pc"))
-head(gdp_data)
+str(gdp_data)
 ```
 
------ United Kingdom is missing from this dataset as well as from a few
-others in Eurostat (we might have to find it somewhere else).
+1)  United Kingdom is missing from this dataset as well as from a few others in Eurostat (we might have to find it somewhere else).
+
+2)  Data needs further cleaning
+
+3)  Reflect whether we might be better suited with other measures of GDP (GDP at PPP)
 
 ### Rural population
 
-Retrieved from the World Bank
-(<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>). Data on the %
-of population living in rural areas.
+Retrieved from the World Bank (<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>).
+
+Data on the % of population living in rural areas over total population.
 
 ```{r}
 rural_data <- read_xls("rural_pop.xls", sheet = 1, range = "A4:BL270")
 
+# selecting only the relevant year
 rural_data <- rural_data |> 
   select(`Country Name`, `Country Code`, `2019`) |> 
   clean_names() |> 
   rename("rural_pop_percentage" = "x2019")
 
-# select European countries
+# builidng a df with country names and codes for the EU-28
 codelist <- countrycode::codelist |> 
-  select(country.name.en, cow.name, eu28, iso.name.en, iso2c, iso3c, un.name.en) |> # selecting variables that might be useful for joins (will probably have to clean later on)
-  filter(!is.na(eu28)) # including the countries that belonged to the EU in 2019 which are listed under Q1 of the questionnaire
+  select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
+  filter(!is.na(eu28)) 
 
 rural_data <- rural_data |> 
   inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+str(rural_data)
 ```
 
 ### Same sex unions
 
-Retrieved from Wikipedia.
+Retrieved from Wikipedia (<https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe>).
+
+Table about status of same sex unions by country in Europe.
 
 ```{r}
-link <- "https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe"
-html_website <- link |> read_html()
-all_tables <- html_website|> html_table()
-marriage_data <- all_tables[[4]]
-marriage_data <- marriage_data |> select(Status, Country)
+# scraping the table
+marriage_data <- read_html("https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe") |>
+  html_table() %>%
+  .[[4]] |>
+  select(Status, Country)
 
 # cleaning the status column
-marriage_data$Status <- sub("\\s*\\(.*|\\s*-.*", "", marriage_data$Status)
+marriage_data <- marriage_data |> 
+  mutate(Status = str_remove(Status, "\\s*\\(.*|\\s*-.*")) |> 
+  filter(!Status %in% c("Total", "Subtotal"))
 unique(marriage_data$Status)
 
 # cleaning the country column
@@ -91,22 +100,15 @@ marriage_data <- marriage_data |>
   mutate(Country = trimws(Country))
 unique(marriage_data$Country)
 
-# getting rid of the total and subtotal rows
-marriage_data <- marriage_data |> 
-  filter(!Status %in% c("Total", "Subtotal"))
-
-# again keeping only the countries that appear in the questionnaire
+# keeping only eu-28 countries 
 marriage_data <- marriage_data |> 
   inner_join(select(codelist, cow.name), by = c("Country" = "cow.name"))
+str(marriage_data)
 ```
 
-This variable could be recoded as either ordinal, categorical (both
-factor) or logical.
+This variable could be recoded as either ordinal, categorical (both factor) or logical.
 
-------- The dataset has 32 observations instead of 28 (EU-28 countries).
-According to this test, Croatia, Hungary, Latvia and Slovakia have two
-different types of status, so maybe we should cross-check with other
-sources?
+The dataset has 32 observations instead of 28 (EU-28 countries).
 
 ```{r}
 marriage_data |> 
@@ -114,25 +116,30 @@ marriage_data |>
   filter(n > 1)
 ```
 
+According to this test, Croatia, Hungary, Latvia and Slovakia have two different types of status, so maybe we should cross-check with other sources?
+
+Diego: the thing is that countries can at the same time have a constitutional ban on marriage and still have legally recognized civil unions. Thus maybe we should exclude this level from this variable as it is not exclusive. The lowest level would remain no recognition.
+
 ### Gender Equality Index
 
-Developed by the European Institute for Gender Equality. Retrieved from
-<https://eige.europa.eu/gender-statistics/dgs/indicator/index_data__index_scores/datatable>
-for the year 2019.
+Developed by the European Institute for Gender Equality. Retrieved from <https://eige.europa.eu/gender-statistics/dgs/indicator/index__index_scores/datatable> for the year 2019.
 
 ```{r}
+# cleaning the data
 gequality_index <- read_xlsx("gender_equality_index_scores.xlsx", range = "A16:V44")
 names(gequality_index) <- names(gequality_index) %>%
- janitor::make_clean_names() %>%
+  janitor::make_clean_names() %>%
   gsub("_score$", "", .)
 names(gequality_index)
 
 gequality_index <- gequality_index |>  
   rename(country_name = geographic_region_sub_domain_scores)
+str(gequality_index)
 ```
 
-###Democracy Index Using the Economist's Democracy Index (there might be
-a better one?).
+No UK in this datset (28 rows because it is present a row about EU as a whole)
+
+### Economist's Democracy Index
 
 ```{r}
 democracy_index <- read_xlsx("EIU_democracy_index.xlsx", sheet = 4)
@@ -147,7 +154,7 @@ democracy_index <- democracy_index |>
 
 # clean var names
 names(democracy_index) <- names(democracy_index) %>%
- janitor::make_clean_names() %>%
+  janitor::make_clean_names() %>%
   gsub("_eiu$", "", .)
 
 names(democracy_index)
@@ -162,7 +169,70 @@ In both of these tables (Gender Equality and Democracy indexes) there
 are more indicators apart from the overall indexes, we have to decide if
 we think they're useful or if we can discard some/all of them.
 
-## Initial data cleaning
+## Data cleaning
+
+### Selecting relevant variables in the survey data
+
+```{r}
+data <- data_raw |> 
+  select(serialid, # unique identifier
+         isocntry, # 2 digit country code
+         starts_with("d11"), # age which one should we keep?
+         starts_with("q1"), # nationality of interviewee. options given: EU28+Other+DK
+         d70, #life satisfaction
+         starts_with("d71"), # interest in politics
+         polintr, # political interest index (summarizes d71 questions)
+         starts_with("sd1"), # friends that are minority groups
+         starts_with("sd2"), # are you part of a minority
+         sd3, # religion
+         starts_with("qc1"), # spread of discrimination in country
+         starts_with("qc2"), # experienced discrimination yourself
+         qc3, # where discrimination took place
+         starts_with("qc4"), # disadvantages during recruitment process
+         starts_with("qc5"), # actions against discrimination
+         starts_with("qc6"), # feelings about minority becoming elected official
+         starts_with("qc7"), # feelings about efforts against discrimination
+         starts_with("qc9"), # opinion about diversity in the workplace
+         qc10, # how would you report discrimination
+         starts_with("qc11"), # willingness to reveal sensitive information
+         starts_with("qc12"), # feelings about colleagues being minority
+         starts_with("qc13"), # feelings about kid being in a relationship with minority
+         starts_with("qc15"), # opinions about lgbtqi 
+         starts_with("qc17"), # information about minorities in school
+         starts_with("qc18"), # feelings about public affection
+         qc19, # target variable transgender
+         qc20, # non-binary genders in documents
+         starts_with("d1"), # political ideology
+         starts_with("d7"), # marital status
+         d10, # gender binary
+         starts_with("d8"), # eduaction 
+         starts_with("d15"), # occupation
+         d25, # rural vs urban
+         starts_with("d43"), # phones availiabilty
+         d60, # financial stress (paying bills)
+         starts_with("d62"), # internet use
+         netuse, # internet index
+         d63, # social class
+         starts_with("d72"), # my voice counts
+         d77, # convincing other people of your opinion 
+         opls, # opinion leadership index
+         # nuts, nutslvl, # region in which interview is carried out?
+         # cntry_de useful?
+         # starts_with("eu"), # groups by eu/eurozone memberships
+         # starts_with("w"), # weights for what?
+  )
+
+
+paradata <- data_raw |> 
+  select(serialid, # to match it with the other data
+         p2, p3, p3r, p4, p5, # paradata)
+  )
+```
+
+### Start cleaning
+
+will do...
+
 
 ### Check overall data quality
 
@@ -252,58 +322,6 @@ P1-P10, date, time, length of interview, people present during
 interview, respondent cooperation, location vars, interviewer number.
 
 Select and rename these key variables:
-
-
-```{r}
-
-# SELECTION DONE TOGETHER needs cleaning
-data_raw |> 
-  select(country,
-         age
-         q1, # maybe for non-eu immigrants
-         d70,
-         d71,
-         sd1,
-         sd2,
-         sd3,
-         qc1,
-         qc2,
-         qc3,#maybe for discrimination in public spaces
-         qc4,
-         qc5,
-         qc6,
-         qc7,
-         #qc8 about roma
-         qc9,
-         qc10,
-         qc11,
-         qc12,
-         qc13,
-         #qc14 roma specific again
-         qc15,
-         #qc16 roma specifica again
-         qc17,
-         qc18,
-         qc19,
-         qc20,
-         d1,
-         d7,
-         d10,
-         d8,
-         d15a,
-         d15b #???
-         d25,
-         d43b,
-         d60,
-         d62,
-         d63,
-         d72,
-         sc4 # maybe keep to see if people are being honest
-         # add all the p?
-         
-         
-         )
-```
 
 ```{r}
 individuals_df <- data_raw |> 
@@ -395,8 +413,8 @@ clean1 <- clean1 |>
   select(-any_of(starts_with("gen")))
 
 # remove additional paradata
-clean1 <- clean1 |> 
-  select(-any_of(starts_with("p7", "p13")))
+# clean1 <- clean1 |> 
+#   select(-any_of(starts_with("p7", "p13")))
 
 ```
 
@@ -437,7 +455,7 @@ could be easier for when we want to investigate new variables?
 
 ```
 
-### Impute actual NA values 
+### Impute actual NA values
 
 As these are inconsistent between each variable, I guess we need to
 override and decide if we then impute the NA values.
@@ -475,7 +493,7 @@ to the questions about transgender discrimination and the overall
 populations.
 
 ```{r}
-plot_missing()
+#plot_missing()
 summary(data_raw$d11)
 # returns nothing now because of NA values are all hard coded as mixed values e.g. some are 7, 98, 12. We probably need to standardise, section above maybe
   
