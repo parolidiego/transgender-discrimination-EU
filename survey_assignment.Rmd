@@ -185,8 +185,8 @@ data <- data_raw |>
          starts_with("sd1"), # friends that are minority groups
          starts_with("sd2"), # are you part of a minority
          sd3, # religion
-         starts_with("qc1"), # spread of discrimination in country
-         starts_with("qc2"), # experienced discrimination yourself
+         starts_with("qc1_"), # spread of discrimination in country
+         starts_with("qc2_"), # experienced discrimination yourself
          qc3, # where discrimination took place
          starts_with("qc4"), # disadvantages during recruitment process
          starts_with("qc5"), # actions against discrimination
@@ -202,7 +202,7 @@ data <- data_raw |>
          starts_with("qc18"), # feelings about public affection
          qc19, # target variable transgender
          qc20, # non-binary genders in documents
-         starts_with("d1"), # political ideology
+         d1, d1r1, d1r2, # political ideology
          starts_with("d7"), # marital status
          d10, # gender binary
          starts_with("d8"), # eduaction 
@@ -222,54 +222,84 @@ data <- data_raw |>
          # starts_with("w"), # weights for what?
   )
 
-
 paradata <- data_raw |> 
   select(serialid, # to match it with the other data
          p2, p3, p3r, p4, p5, # paradata)
   )
 ```
 
-### Start cleaning
-
-will do...
-
-
 ### Check overall data quality
 
-tbc for initial checks?
+```{r}
+plot_intro(data)
+```
 
-### Country data
-
-We have columns for West and East Germany in our data. To match the
-iso2c classifications, we join these in the raw data. may want to
-consolidate all of the groups. There is a separate column called "United
-Germany" that is a dummy variable.
-
-Easiest way to fix this is just only take the first 2 letters of the
-country codes. We then get the EU28 countries.
+All columns are numeric columns, the only one which is not is `isocntry`
 
 ```{r}
-# extract labels - we see 40 countries but it specifies which are not includes.
-country_labels <- attr(data_raw$country, "labels")
-# join on names
-country_tibble <- tibble(cntry_code = as.integer(country_labels), 
-                         country_name = names(country_labels))
-country_tibble
-
-# clean country code ID and then join on names from codelist table
-data_raw <- data_raw |> 
-  mutate(countryid = str_sub(isocntry, 1, 2),
-         country_names = countrycode(countryid, 
-                                               origin = "iso2c", 
-                                               destination = "country.name"), 
-         .after=isocntry) 
-
-# #Now check the summary of our countries. Which matches the EU28,
-data_raw |> 
-  group_by(countryid, country_names) |> 
-  tally() #count the observations too
-
+data |> 
+  select(where(~ !is.numeric(.)))
 ```
+
+
+```{r}
+# Extracting all the full names of the columns
+# They might be useful to rename the variables systematically
+variable_names <- tibble(
+  var_code = names(data),
+  var_full_name = sapply(data, function(col) attr(col, "label")))
+head(variable_names)
+```
+
+```{r}
+# Trying to automatize the cleaning by extracting the labels and their respective names for each column
+attr(data$d11r1, "labels")
+names(attr(data$d11r1, "labels"))
+tibble(name_labels = names(attr(data$d11r1, "labels")),
+       labels = attr(data$d11r1, "labels"))
+
+# Create a list of tibbles containing the labels and their associated name for each variable
+list_label_tibbles <- 
+  #Applies a function across all columns of a df and returns results as a list
+  lapply(names(data), function(col_name) {
+    labels <- attr(data[[col_name]], "labels")  # Extract labels
+    name_labels <- names(labels)  # Extract label names
+    # Create tibble with the extracted data only if labels exist
+    if (!is.null(labels)) {
+      tibble(name_labels = name_labels, labels = labels)} 
+    else {NULL}  # Returns a NULL element for columns without labels
+  })
+
+# Giving to each element of the list as name the name of the variable
+list_label_tibbles <- setNames(list_label_tibbles, names(data))
+
+# For example
+list_label_tibbles$d11r1
+# Right column is what it appears in our data (as a number)
+# Left column is the label that we must assign to that number when we factorize
+
+# # Remove NULL elements (columns without labels)
+# list_label_tibbles <- list_label_tibbles[!sapply(list_label_tibbles, is.null)]
+```
+
+### Start cleaning
+
+```{r}
+# Recoding together Germany East and West because we are running analysis at the country level
+unique(data$isocntry)
+data <- data |> 
+  mutate(isocntry = case_when(
+    isocntry %in% c("DE-W", "DE-E") ~ "DE",
+    TRUE ~ isocntry))
+# We might want to join the full name of the countries using the codelist df
+```
+
+```{r}
+non_factor_variables <- c("serialid", "isocntry", "d11", starts_with("q1_"), starts_with("sd2_"), starts_with("qc2_"), starts_with("qc4_"), "d8", "opls")
+# q1_ needs some other encoding ????
+# check d15b
+```
+
 
 # Identify key socio-demogrpahic variables
 
