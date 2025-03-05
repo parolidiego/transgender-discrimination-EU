@@ -295,7 +295,21 @@ data <- data |>
 ```
 
 ```{r}
-non_factor_variables <- c("serialid", "isocntry", "d11", starts_with("q1_"), starts_with("sd2_"), starts_with("qc2_"), starts_with("qc4_"), "d8", "opls")
+non_factor_variables <- c("serialid", "isocntry", "d11", 
+                          names(data)[startsWith(names(data), "q1_")],
+                          names(data)[startsWith(names(data), "sd2_")],
+                          names(data)[startsWith(names(data), "qc2_")],
+                          names(data)[startsWith(names(data), "qc4_")],
+                          "d8", "opls")
+factor_variables <- setdiff(names(data), non_factor_variables)
+
+data <- data |> 
+  mutate(across(all_of(factor_variables), labelled::to_factor))
+
+data <- data |> 
+  mutate(across(all_of(factor_variables), ~ fct_na_level_to_value(., extra_levels = "DK")))
+
+
 # q1_ needs some other encoding ????
 # check d15b
 ```
