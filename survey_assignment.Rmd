@@ -1,7 +1,9 @@
 ---
 title: "Survey II Assignment"
-output: html_document
-date: "2025-02-13"
+author: "..."
+output: 
+  html_document:
+    toc: true
 editor_options: 
   markdown: 
     wrap: 72
@@ -11,11 +13,11 @@ editor_options:
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Loading libraries
+# Loading libraries
 
-```{r}
+```{r, message = FALSE}
+rm(list = ls())
 library(tidyverse)
-library(tidyr)
 library(haven)
 library(readxl)
 library(xml2)
@@ -23,90 +25,91 @@ library(rvest)
 library(janitor)
 library(DataExplorer)
 library(countrycode)
-
+library(explore)
 ```
 
-## Loading data
+# Loading data
 
-### Survey data
+## Survey data
 
 ```{r}
 data_raw <- read_dta("ZA7575.dta")
 ```
 
+## Country-level data
+
 ### GDP per capita
 
-Retrieved from Eurostat for the year 2019
-(<https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en>).
+Retrieved from Eurostat (<https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en>) for the year 2019.
 
 ```{r}
 gdp_data <- read_xlsx("gdp_pc_2019.xlsx", sheet = 3, range = "A11:B39", col_names = c("country", "gdp_pc"))
-head(gdp_data)
+str(gdp_data)
 ```
 
------ United Kingdom is missing from this dataset as well as from a few
-others in Eurostat (we might have to find it somewhere else).
+1)  United Kingdom is missing from this dataset as well as from a few others in Eurostat (we might have to find it somewhere else).
+
+2)  Data needs further cleaning
+
+3)  Reflect whether we might be better suited with other measures of GDP (GDP at PPP)
 
 ### Rural population
 
-Retrieved from the World Bank
-(<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>). Data on the %
-of population living in rural areas.
+Retrieved from the World Bank (<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>).
+
+Data on the % of population living in rural areas over total population.
 
 ```{r}
 rural_data <- read_xls("rural_pop.xls", sheet = 1, range = "A4:BL270")
 
+# selecting only the relevant year
 rural_data <- rural_data |> 
   select(`Country Name`, `Country Code`, `2019`) |> 
   clean_names() |> 
   rename("rural_pop_percentage" = "x2019")
 
-# select European countries
+# builidng a df with country names and codes for the EU-28
 codelist <- countrycode::codelist |> 
-  select(country.name.en, cow.name, eu28, iso.name.en, iso2c, iso3c, un.name.en) |> # selecting variables that might be useful for joins (will probably have to clean later on)
-  filter(!is.na(eu28)) # including the countries that belonged to the EU in 2019 which are listed under Q1 of the questionnaire
+  select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
+  filter(!is.na(eu28)) 
 
 rural_data <- rural_data |> 
   inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+str(rural_data)
 ```
 
 ### Same sex unions
 
-Retrieved from Wikipedia.
+Retrieved from Wikipedia (<https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe>).
+
+Table about status of same sex unions by country in Europe.
 
 ```{r}
-link <- "https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe"
-html_website <- link |> read_html()
-all_tables <- html_website|> html_table()
-marriage_data <- all_tables[[4]]
-marriage_data <- marriage_data |> select(Status, Country)
+# scraping the table
+marriage_data <- read_html("https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe") |>
+  html_table() %>%
+  .[[4]] |>
+  select(Status, Country)
 
 # cleaning the status column
-marriage_data$Status <- sub("\\s*\\(.*|\\s*-.*", "", marriage_data$Status)
-unique(marriage_data$Status)
+marriage_data <- marriage_data |> 
+  mutate(Status = str_remove(Status, "\\s*\\(.*|\\s*-.*")) |> 
+  filter(!Status %in% c("Total", "Subtotal"))
 
 # cleaning the country column
 marriage_data <- marriage_data |> 
   mutate(Country = str_replace_all(Country, c("\\*" = "", "†" = "", "\\[.*?\\]" = ""))) |> 
   mutate(Country = trimws(Country))
-unique(marriage_data$Country)
 
-# getting rid of the total and subtotal rows
-marriage_data <- marriage_data |> 
-  filter(!Status %in% c("Total", "Subtotal"))
-
-# again keeping only the countries that appear in the questionnaire
+# keeping only eu-28 countries 
 marriage_data <- marriage_data |> 
   inner_join(select(codelist, cow.name), by = c("Country" = "cow.name"))
+str(marriage_data)
 ```
 
-This variable could be recoded as either ordinal, categorical (both
-factor) or logical.
+This variable could be recoded as either ordinal, categorical (both factor) or logical.
 
-------- The dataset has 32 observations instead of 28 (EU-28 countries).
-According to this test, Croatia, Hungary, Latvia and Slovakia have two
-different types of status, so maybe we should cross-check with other
-sources?
+The dataset has 32 observations instead of 28 (EU-28 countries).
 
 ```{r}
 marriage_data |> 
@@ -114,25 +117,29 @@ marriage_data |>
   filter(n > 1)
 ```
 
+According to this test, Croatia, Hungary, Latvia and Slovakia have two different types of status, so maybe we should cross-check with other sources?
+
+Diego: the thing is that countries can at the same time have a constitutional ban on marriage and still have legally recognized civil unions. Thus maybe we should exclude this level from this variable as it is not exclusive. The lowest level would remain no recognition.
+
 ### Gender Equality Index
 
-Developed by the European Institute for Gender Equality. Retrieved from
-<https://eige.europa.eu/gender-statistics/dgs/indicator/index_data__index_scores/datatable>
-for the year 2019.
+Developed by the European Institute for Gender Equality. Retrieved from <https://eige.europa.eu/gender-statistics/dgs/indicator/index__index_scores/datatable> for the year 2019.
 
 ```{r}
+# cleaning the data
 gequality_index <- read_xlsx("gender_equality_index_scores.xlsx", range = "A16:V44")
 names(gequality_index) <- names(gequality_index) %>%
- janitor::make_clean_names() %>%
+  janitor::make_clean_names() %>%
   gsub("_score$", "", .)
-names(gequality_index)
 
 gequality_index <- gequality_index |>  
   rename(country_name = geographic_region_sub_domain_scores)
+str(gequality_index)
 ```
 
-###Democracy Index Using the Economist's Democracy Index (there might be
-a better one?).
+No UK in this datset (28 rows because it is present a row about EU as a whole)
+
+### Economist's Democracy Index
 
 ```{r}
 democracy_index <- read_xlsx("EIU_democracy_index.xlsx", sheet = 4)
@@ -147,59 +154,220 @@ democracy_index <- democracy_index |>
 
 # clean var names
 names(democracy_index) <- names(democracy_index) %>%
- janitor::make_clean_names() %>%
+  janitor::make_clean_names() %>%
   gsub("_eiu$", "", .)
-
-names(democracy_index)
 
 democracy_index <- democracy_index |> 
   rename(country_code = geo,
          country_name = name,
          year = time)
+
+str(democracy_index)
 ```
 
 In both of these tables (Gender Equality and Democracy indexes) there
 are more indicators apart from the overall indexes, we have to decide if
 we think they're useful or if we can discard some/all of them.
 
-## Initial data cleaning
+# Data cleaning
 
-### Check overall data quality
-
-tbc for initial checks?
-
-### Country data
-
-We have columns for West and East Germany in our data. To match the
-iso2c classifications, we join these in the raw data. may want to
-consolidate all of the groups. There is a separate column called "United
-Germany" that is a dummy variable.
-
-Easiest way to fix this is just only take the first 2 letters of the
-country codes. We then get the EU28 countries.
+## Selecting relevant variables in the survey data
 
 ```{r}
-# extract labels - we see 40 countries but it specifies which are not includes.
-country_labels <- attr(data_raw$country, "labels")
-# join on names
-country_tibble <- tibble(cntry_code = as.integer(country_labels), 
-                         country_name = names(country_labels))
-country_tibble
+data <- data_raw |> 
+  select(serialid, # unique identifier
+         isocntry, # 2 digit country code
+         starts_with("d11"), # age variables
+         starts_with("q1"), # nationality of interviewee. options given: EU28+Other+DK
+         d70, #life satisfaction
+         starts_with("d71"), # interest in politics
+         polintr, # political interest index (summarizes d71 questions)
+         starts_with("sd1"), # friends that are minority groups
+         starts_with("sd2"), # are you part of a minority
+         sd3, # religion
+         starts_with("qc1_"), # spread of discrimination in country
+         starts_with("qc2_"), # experienced discrimination yourself
+         qc3, # where discrimination took place
+         starts_with("qc4"), # disadvantages during recruitment process
+         starts_with("qc5"), # actions against discrimination
+         starts_with("qc6"), # feelings about minority becoming elected official
+         starts_with("qc7"), # feelings about efforts against discrimination
+         starts_with("qc9"), # opinion about diversity in the workplace
+         qc10, # how would you report discrimination
+         starts_with("qc11"), # willingness to reveal sensitive information
+         starts_with("qc12"), # feelings about colleagues being minority
+         starts_with("qc13"), # feelings about kid being in a relationship with minority
+         starts_with("qc15"), # opinions about lgbtqi 
+         starts_with("qc17"), # information about minorities in school
+         starts_with("qc18"), # feelings about public affection
+         qc19, # target variable transgender
+         qc20, # non-binary genders in documents
+         d1, d1r1, d1r2, # political ideology
+         starts_with("d7"), # marital status
+         d10, # gender binary
+         starts_with("d8"), # eduaction 
+         starts_with("d15"), # occupation
+         d25, # rural vs urban
+         starts_with("d43"), # phones availiabilty
+         d60, # financial stress (paying bills)
+         starts_with("d62"), # internet use
+         netuse, # internet index
+         d63, # social class
+         starts_with("d72"), # my voice counts
+         d77, # convincing other people of your opinion 
+         opls, # opinion leadership index
+         # nuts, nutslvl, # region in which interview is carried out?
+         # cntry_de useful?
+         # starts_with("eu"), # groups by eu/eurozone memberships
+         # starts_with("w"), # weights for what?
+  )
 
-# clean country code ID and then join on names from codelist table
-data_raw <- data_raw |> 
-  mutate(countryid = str_sub(isocntry, 1, 2),
-         country_names = countrycode(countryid, 
-                                               origin = "iso2c", 
-                                               destination = "country.name"), 
-         .after=isocntry) 
-
-# #Now check the summary of our countries. Which matches the EU28,
-data_raw |> 
-  group_by(countryid, country_names) |> 
-  tally() #count the observations too
-
+paradata <- data_raw |> 
+  select(serialid, # to match it with the other data
+         p2, p3, p3r, p4, p5, # paradata)
+  )
 ```
+
+## Check overall data quality
+
+```{r}
+explore_tbl(data)
+plot_intro(data)
+```
+
+All columns are numeric columns, the only one which is not is `isocntry`
+
+```{r}
+data |> 
+  select(where(~ !is.numeric(.)))
+```
+
+Most columns do not have explicit NAs
+
+```{r}
+plot_missing(data)
+names(which(colSums(is.na(data)) > 0))
+```
+
+Exploiting the fact that the .dta files has attributes (labels) for all its columns.
+
+If we search for `attr(colname, "label")` you get back the original long name of the variable 
+
+If we instead search for `attr(colname, "labels")` you get back all the possible encoding levels of the variable (ex.1,2,3,4 etc.) and by doing `names(attr(colname, "labels"))` you get back the actual meaning of those numbers (ex. 1 = "Yes", 2 = "No", etc.)
+
+```{r}
+# Extracting all the full names of the columns
+variable_names <- tibble(
+  var_code = names(data),
+  var_full_name = sapply(data, function(col) attr(col, "label")))
+variable_names
+```
+
+These long names df might be useful to rename the variables systematically all together. Remember in case we filter out variables after this code chunk and in case we use this df to rename variables that there might be disalignments. 
+
+Will now look into the labels for the different levels that our factor variables can take:
+
+```{r}
+attr(data$d11r1, "labels")
+names(attr(data$d11r1, "labels"))
+tibble(name_labels = names(attr(data$d11r1, "labels")),
+       labels = attr(data$d11r1, "labels"))
+
+# Create a list of tibbles containing the labels and their associated name for each variable
+list_label_tibbles <- 
+  #Applies a function across all columns of a df and returns results as a list
+  lapply(names(data), function(col_name) {
+    labels <- attr(data[[col_name]], "labels")  # Extract labels
+    name_labels <- names(labels)  # Extract label names
+    # Create tibble with the extracted data only if labels exist
+    if (!is.null(labels)) {
+      tibble(name_labels = name_labels, labels = labels)} 
+    else {NULL}  # Returns a NULL element for columns without labels
+  })
+
+# Giving to each element of the list as name the name of the variable
+list_label_tibbles <- setNames(list_label_tibbles, names(data))
+
+# For example
+list_label_tibbles$d11r1
+```
+
+Right column is what it appears in our data (as a number). Left column is the label that we must assign to that number when we factorize
+
+## Start cleaning
+
+```{r}
+# Recoding together Germany East and West because we are running analysis at the country level
+unique(data$isocntry)
+data <- data |> 
+  mutate(isocntry = case_when(
+    isocntry %in% c("DE-W", "DE-E") ~ "DE",
+    TRUE ~ isocntry))
+# We might want to join the full name of the countries using the codelist df
+```
+
+Separating variables for which I can use the attribute labels to factorize them and the variables for which this strategy cannot be used
+
+```{r}
+non_factor_variables <- c("serialid", "isocntry", "d11", 
+                          names(data)[startsWith(names(data), "q1_")],
+                          names(data)[startsWith(names(data), "sd2_")],
+                          names(data)[startsWith(names(data), "qc2_")],
+                          names(data)[startsWith(names(data), "qc4_")],
+                          "d8", "opls")
+factor_variables <- setdiff(names(data), non_factor_variables)
+```
+
+The factors variables will be cleaned below
+
+The rest of the variables:
+
+`serialid` does not need any cleaning
+
+`isocntry` does not need any further cleaning
+
+`d11` does not need any further cleaning
+
+`q1_n` are dummy variables for nationality, but one can have more than one nationality so I don't know how to clean those variables. Probably better to discard them all or to just use them for creating a variable for being a foreigner from outside of the EU (`q1_29`)
+
+`sd2_n` again are dummies for whether you consider yourself to be a part of different minorities. One can fit into multiple categories tho. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is also worth considering to remove `sd2_7` to `sd2_10` and `sd2t`
+
+`qc2_n` are dummies for whether you have experienced discrimination on the basis of different reasons. Same here, one can have experienced discrimination because of more than one reason, multiple options are allowed. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is worth considering to remove `qc2_14` to `qc2_16`
+
+`qc4_n` are dummies for whether you think people would be disadvantaged during the recruitment process for being a minority. Same here, one can have experienced disadvantages because of more than one reason, multiple options are allowed. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is probably worth removing `qc4_16` to `qc4_18` and consider whether to use or not `qc4t_1` `qc4t_2` `qc4t_3`
+
+`d8` does not need any cleaning
+
+`opls` does not need any cleaning. In case we want to use it, it needs to be factorized and we should consider assigning to it decent labels. 1 is a person that talks often about his opinion while 4 is a person that does not.
+
+I now proceed to factorize and assign labels to all those variables for which within the attributes of the dataframe there were meaningful labels.
+
+```{r}
+# Converting them to factors and assign them their labels automatically
+data <- data |> 
+  mutate(across(all_of(factor_variables), labelled::to_factor))
+
+# Turning DK into NAs for all the factor variables
+data <- data |> 
+  mutate(across(all_of(factor_variables), ~ fct_na_level_to_value(., extra_levels = "DK")))
+
+# Converting to numeric the variables that should be numeric
+# They are already numeric but they carry with them some labels as well that only confuse us, by doing this I remove the labels
+data <- data |> 
+  mutate(d11 = as.numeric(d11),
+         d8 = as.numeric(d8))
+```
+
+We should be checking whether there are other levels for different variables that need special treatments (such as refuse to respond, should we turn those into NAs?). We can do this by looking at the summary below
+
+So this is our situation so far:
+
+```{r}
+head(data)
+summary(data)
+plot_missing(data)
+```
+
 
 # Identify key socio-demogrpahic variables
 
@@ -254,61 +422,45 @@ interview, respondent cooperation, location vars, interviewer number.
 Select and rename these key variables:
 
 ```{r}
-individuals_df <- data_raw |> 
-  
-  #use select function and rename all the in scope variables 
-  select(
-      uniqid, 
-      isocntry,
-      countryid,
-      country_names,
-        
-    
-      target_var = qc19,
-      
-    # socioeconomic variables for individuals 
-      gender = d10,
-      age = d11,
-      age_4cat = d11r1,
-      age_6cat = d11r2,
-      age_7cat = d11r3,
-      polit_ideology = d1,
-      educ_5cat = d8r2, # all the education vars have low cutoffs 
-      educ_11cat = d8r1,
-      lifesat = d70,
-      religion = sd3, 
-      class = d63,
-      occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
-      financialstress = d60, #difficulty paying bills
-      polintr, # no need to rename political interest var
-      
-    # paradata variables   
-      int_date = p1,
-      int_time = p2,
-      int_length = p3r, #using recoded var instead of base p3 
-      int_ppl_present = p4,
-      int_resp_coop = p5,
-      int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
-      #p7 not useful, location, no data for p8-11
-      
-      #p13 is language of interview. Probably not useful? 
-      )
-
-```
-
-Misc code for checking the sociodemographic vars (to be deleted)
-
-```{r}
-#check repeated cols
-data_raw |> 
-  select(starts_with("p13"))
-
-# check labels
-attr(data_raw$d15a_r2, "labels")
-attr(data_raw$d7r, "labels")
-
-#check values
-summary(data_raw$p9)
+# individuals_df <- data_raw |> 
+#   
+#   #use select function and rename all the in scope variables 
+#   select(
+#       uniqid, 
+#       isocntry,
+#       countryid,
+#       country_names,
+#         
+#     
+#       target_var = qc19,
+#       
+#     # socioeconomic variables for individuals 
+#       gender = d10,
+#       age = d11,
+#       age_4cat = d11r1,
+#       age_6cat = d11r2,
+#       age_7cat = d11r3,
+#       polit_ideology = d1,
+#       educ_5cat = d8r2, # all the education vars have low cutoffs 
+#       educ_11cat = d8r1,
+#       lifesat = d70,
+#       religion = sd3, 
+#       class = d63,
+#       occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
+#       financialstress = d60, #difficulty paying bills
+#       polintr, # no need to rename political interest var
+#       
+#     # paradata variables   
+#       int_date = p1,
+#       int_time = p2,
+#       int_length = p3r, #using recoded var instead of base p3 
+#       int_ppl_present = p4,
+#       int_resp_coop = p5,
+#       int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
+#       #p7 not useful, location, no data for p8-11
+#       
+#       #p13 is language of interview. Probably not useful? 
+#       )
 
 ```
 
@@ -343,8 +495,8 @@ clean1 <- clean1 |>
   select(-any_of(starts_with("gen")))
 
 # remove additional paradata
-clean1 <- clean1 |> 
-  select(-any_of(starts_with("p7", "p13")))
+# clean1 <- clean1 |> 
+#   select(-any_of(starts_with("p7", "p13")))
 
 ```
 
@@ -385,7 +537,7 @@ could be easier for when we want to investigate new variables?
 
 ```
 
-### Impute actual NA values 
+### Impute actual NA values
 
 As these are inconsistent between each variable, I guess we need to
 override and decide if we then impute the NA values.
@@ -423,7 +575,7 @@ to the questions about transgender discrimination and the overall
 populations.
 
 ```{r}
-plot_missing()
+#plot_missing()
 summary(data_raw$d11)
 # returns nothing now because of NA values are all hard coded as mixed values e.g. some are 7, 98, 12. We probably need to standardise, section above maybe
   
