@@ -173,22 +173,49 @@ we think they're useful or if we can discard some/all of them.
 
 ## Selecting relevant variables in the survey data
 
+We are discarding all variables that relate to trade and globalization as deemed not relevant for our analysis `qa`. We are also discarding variales related to energy policies `qb`.
+
+Some of the doubts we had:
+
+AGE
+
+```{r}
+age_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
+ggplot(age_df, aes(x = d11, y = mean)) + geom_point()
+```
+As relationship seems pretty linear we are going to use the continuous variable for age
+
+NATIONALITY
+
+There is no easy way to create an immigrant dummy by checking whether someone does not have the nationality of the country in which he is being interviewed for the survey. So we are just going to use `q1_29` as a dummy for whether someone owns a non-EU nationality
+
+POLITICAL INTEREST
+
+Using only `polintr` as a summary of the whole `d71` question about how strong is your interest in politics in various domains
+
+EXPERIENCED DISCRIMINATION
+
+For the questions about whether you have experienced discrimination `qc2_` I am keeping only `qc2_15` which is a binary on whether you have experienced any discrimination or not and I am not keeping the other categories that allowed us to understand if you had experienced discrimination on the basis of a particular motive. We can probably assume that if a person is a part of a specific minority (info from `sd2`) and is being discriminated is because of being part of that minority (at least in most cases), therefore it felt like information we already had (and which we can easily put in our regression using interaction effects)
+
+PERCIEVED DISCRIMINATION in country
+
+This is a question (`qc1`) about how widespread you perceived discrimination is in your country. It is a rather peculiar question because it asks indiviudals for perception at the country level. I think it might be more useful (by aggregating results by country) to use it to build a country level indicator of perceived discrimination against certain minorities that are of our interest rather than use it as an individual level variable. So I will keep them out of the dataset for now
+
+For the same reason I am also discarding `qc_4` that asks whether in your country you feel like candidates with certain characteristics would be at a disadvantage in the recruitment process. It still basically asks about perceived discrimination at the country level.
+
 ```{r}
 data <- data_raw |> 
   select(serialid, # unique identifier
          isocntry, # 2 digit country code
-         starts_with("d11"), # age variables
-         starts_with("q1"), # nationality of interviewee. options given: EU28+Other+DK
+         d11, # age variables
+         q1_29, # nationality of interviewee. options given: EU28+Other+DK, using only other = outside of EU
          d70, #life satisfaction
-         starts_with("d71"), # interest in politics
          polintr, # political interest index (summarizes d71 questions)
          starts_with("sd1"), # friends that are minority groups
          starts_with("sd2"), # are you part of a minority
          sd3, # religion
-         starts_with("qc1_"), # spread of discrimination in country
-         starts_with("qc2_"), # experienced discrimination yourself
+         qc2_15, # experienced discrimination yourself
          qc3, # where discrimination took place
-         starts_with("qc4"), # disadvantages during recruitment process
          starts_with("qc5"), # actions against discrimination
          starts_with("qc6"), # feelings about minority becoming elected official
          starts_with("qc7"), # feelings about efforts against discrimination
@@ -227,6 +254,22 @@ paradata <- data_raw |>
          p2, p3, p3r, p4, p5, # paradata)
   )
 ```
+
+Removing some of the previously selected variables
+
+`sd2_7` to `sd2_10`: these are possible answer deemed irrelevant to the question about yourself being part of the following minorities:
+`sd2_7` other minorities (I don't know what other relevant minorities could be there), 
+`sd2_8` not part of minorities (can be deducted from the rest), 
+`sd2_9` refusal to respond, 
+`sd2_10` DK answers
+`sd2t` summary binary variable for being part of any minority (we are going to keep the more specific one)
+  
+```{r}
+data <- data |> 
+  select(-c(sd2_7, sd2_8, sd2_9, sd2_10, sd2t))
+# Keep in mind that sd2t does not have NAs so we might want to use that instead of the more specific ones
+```
+
 
 ## Check overall data quality
 
@@ -309,11 +352,12 @@ data <- data |>
 Separating variables for which I can use the attribute labels to factorize them and the variables for which this strategy cannot be used
 
 ```{r}
-non_factor_variables <- c("serialid", "isocntry", "d11", 
-                          names(data)[startsWith(names(data), "q1_")],
+data <- data |> 
+  rename(friends_trans = sd1_7)
+
+non_factor_variables <- c("serialid", "tnscntry", "isocntry", "d11", "q1_29", 
+                          names(data)[startsWith(names(data), "sd1_")],
                           names(data)[startsWith(names(data), "sd2_")],
-                          names(data)[startsWith(names(data), "qc2_")],
-                          names(data)[startsWith(names(data), "qc4_")],
                           "d8", "opls")
 factor_variables <- setdiff(names(data), non_factor_variables)
 ```
@@ -356,9 +400,37 @@ data <- data |>
 data <- data |> 
   mutate(d11 = as.numeric(d11),
          d8 = as.numeric(d8))
+
+# Converting q1_29 to factor without assigning labels (1 if non-Eu nationality, 0 if EU nationality)
+# Same for sd2_
+data <- data |> 
+  mutate(nonEU_national = as.factor(q1_29),
+         across(starts_with("sd2_"), ~ as.factor(.x)))
 ```
 
+```{r}
+# Creating a variable that counts the number of different minority groups a person has acquaintances with
+data <- data |>  
+  mutate(across(starts_with("sd1"), ~ if_else(.x == 1, 1, 0))) |> 
+  mutate(friends_minorities = sd1_1+sd1_2+sd1_3+sd1_4+sd1_5+sd1_6+sd1_8) |> 
+  relocate(friends_minorities, .before="sd1_1") |> 
+  select(-starts_with("sd1"))
+```
+
+
+
 We should be checking whether there are other levels for different variables that need special treatments (such as refuse to respond, should we turn those into NAs?). We can do this by looking at the summary below
+
+First let's change the name and try to clean them to get to significant names
+
+```{r}
+colnames(data) <- variable_names$var_full_name
+
+data <- data |> 
+  clean_names()
+```
+
+
 
 So this is our situation so far:
 
