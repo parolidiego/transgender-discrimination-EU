@@ -177,6 +177,8 @@ We are discarding all variables that relate to trade and globalization as deemed
 
 We have also not considered questions specifically about Roma ex `qc8` and `qc14` and `qc16`
 
+<br><br>
+
 Some of the doubts we had:
 
 AGE
@@ -187,6 +189,8 @@ ggplot(age_df, aes(x = d11, y = mean)) + geom_point()
 ```
 As relationship seems pretty linear we are going to use the continuous variable for age and there seems to be a clear group (1to4) which is the same used in the variable with 3 categories left, center and right so we will use the 3-categories variable
 
+<br><br>
+
 POLITICAL OPINIONS
 
 ```{r}
@@ -196,17 +200,36 @@ ggplot(political_df, aes(x = d1, y = mean)) + geom_point() + xlim(1,10)
 
 For political opinions it seems that the relationship is less linear so we will work on the 5 categories cod
 
+<br><br>
+
+MARRIAGE
+
+```{r}
+marriage_df <- data_raw |> summarise(mean = mean(qc19), .by = d7r1)
+ggplot(marriage_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5)
+```
+
+Of all the possible combinations this one seems the best to highlight differences in our target variable
+
+<br><br>
+
 NATIONALITY
 
 There is no easy way to create an immigrant dummy by checking whether someone does not have the nationality of the country in which he is being interviewed for the survey. So we are just going to use `q1_29` as a dummy for whether someone owns a non-EU nationality
+
+<br><br>
 
 POLITICAL INTEREST
 
 Using only `polintr` as a summary of the whole `d71` question about how strong is your interest in politics in various domains
 
+<br><br>
+
 EXPERIENCED DISCRIMINATION
 
 For the questions about whether you have experienced discrimination `qc2_` I am keeping only `qc2_15` which is a binary on whether you have experienced any discrimination or not and I am not keeping the other categories that allowed us to understand if you had experienced discrimination on the basis of a particular motive. We can probably assume that if a person is a part of a specific minority (info from `sd2`) and is being discriminated is because of being part of that minority (at least in most cases), therefore it felt like information we already had (and which we can easily put in our regression using interaction effects)
+
+<br><br>
 
 PERCIEVED DISCRIMINATION in country
 
@@ -215,6 +238,8 @@ This is a question (`qc1`) about how widespread you perceived discrimination is 
 For the same reason I am also discarding `qc4` that asks whether in your country you feel like candidates with certain characteristics would be at a disadvantage in the recruitment process. It still basically asks about perceived discrimination at the country level.
 
 And the same reasoning also applies to `qc7` which asks if efforts towards reducing discrimination are effective in your country.
+
+<br><br>
 
 HOW DISCRIMINATORY ARE YOU score
 
@@ -228,6 +253,8 @@ Option also to discard them all (anti lgbtqi sentiment is also captured in the n
 
 `qc6` also asks about discriminatory behaviors, but is about elected public official, it does not ask about a situation that impacts you personally. It also uses different categories for minorities therefore I prefer to use `qc12` and `qc13` rather than `qc6`
 
+<br><br>
+
 SUPPORTIVE OF LGBTQ RIGHTS INDEX
 
 Using `qc15` we can again build an index for how supportive of lgbtq rights a person is. 
@@ -237,6 +264,8 @@ I again choose to take the mean across the different answers but we could also u
 If we feel each or some answers are particularly useful (given they are closely related with our target variable) we can also use them separately 
 
 We could also use `qc18` to try to capture anti lgbtq sentiment, but I preferred `qc15` as it seemed more straightforward (I therfore deleted `qc18`, but we can put it back if useful)
+
+<br><br>
 
 OTHERS
 
@@ -265,7 +294,7 @@ data <- data_raw |>
          qc19, # target variable transgender
          qc20, # non-binary genders in documents
          d1r1, # political ideology
-         d7, d7r1, d7r2, d7r3, # marital status
+         d7r1, # marital status
          d10, # gender binary
          starts_with("d8"), # eduaction 
          starts_with("d15"), # occupation
@@ -485,7 +514,6 @@ data <- data |>
 ```
 
 
-Not sure what to do with qc9
 
 
 
