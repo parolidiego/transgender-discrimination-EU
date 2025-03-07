@@ -185,7 +185,16 @@ AGE
 age_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
 ggplot(age_df, aes(x = d11, y = mean)) + geom_point()
 ```
-As relationship seems pretty linear we are going to use the continuous variable for age
+As relationship seems pretty linear we are going to use the continuous variable for age and there seems to be a clear group (1to4) which is the same used in the variable with 3 categories left, center and right so we will use the 3-categories variable
+
+POLITICAL OPINIONS
+
+```{r}
+political_df <- data_raw |> summarise(mean = mean(qc19), .by = d1)
+ggplot(political_df, aes(x = d1, y = mean)) + geom_point() + xlim(1,10)
+```
+
+For political opinions it seems that the relationship is less linear so we will work on the 5 categories cod
 
 NATIONALITY
 
@@ -213,15 +222,27 @@ I use `qc12` and `qc13` to build a score from 1 to 10 of how discriminatory are 
 
 Note for some categories this score is a bit stupid (ex. voting for whether you would feel uncomfortable if your child was in a love relationship with a old person would give you a high racist score against old people, this is an example of some of the categories for which it is worth excluding the index)
 
-We can also further aggregate to obtain just one score (or obtain religious/ethnic score etc.)
+We can also further aggregate to obtain just one score (or obtain religious/ethnic score etc.). 
+
+Option also to discard them all (anti lgbtqi sentiment is also captured in the next index built from `qc15`)
 
 `qc6` also asks about discriminatory behaviors, but is about elected public official, it does not ask about a situation that impacts you personally. It also uses different categories for minorities therefore I prefer to use `qc12` and `qc13` rather than `qc6`
+
+SUPPORTIVE OF LGBTQ RIGHTS INDEX
+
+Using `qc15` we can again build an index for how supportive of lgbtq rights a person is. 
+
+I again choose to take the mean across the different answers but we could also use median/mode if we think is better
+
+If we feel each or some answers are particularly useful (given they are closely related with our target variable) we can also use them separately 
+
+We could also use `qc18` to try to capture anti lgbtq sentiment, but I preferred `qc15` as it seemed more straightforward (I therfore deleted `qc18`, but we can put it back if useful)
 
 OTHERS
 
 `qc11` is a strange question feels useless to me, I removed it for now but we can think about it
 
-I also removed `qc9` as I don't really know what to do with it
+I also removed `qc9` as I don't really know what to do with it and `qc17`
 
 ```{r}
 data <- data_raw |> 
@@ -241,11 +262,9 @@ data <- data_raw |>
          starts_with("qc12"), # feelings about colleagues being minority
          starts_with("qc13"), # feelings about kid being in a relationship with minority
          starts_with("qc15"), # opinions about lgbtqi 
-         starts_with("qc17"), # information about minorities in school
-         starts_with("qc18"), # feelings about public affection
          qc19, # target variable transgender
          qc20, # non-binary genders in documents
-         d1, d1r1, d1r2, # political ideology
+         d1r1, # political ideology
          d7, d7r1, d7r2, d7r3, # marital status
          d10, # gender binary
          starts_with("d8"), # eduaction 
@@ -285,7 +304,8 @@ data <- data |>
   # Keep in mind that sd2t does not have NAs so we might want to use that instead of the more specific ones
   select(-c(sd2_7, sd2_8, sd2_9, sd2_10, sd2t)) |> 
   select(-(starts_with("qc12") & ends_with("r"))) |> 
-  select(-(starts_with("qc13") & ends_with("r")))
+  select(-(starts_with("qc13") & ends_with("r"))) |> 
+  select(-(starts_with("qc18") & ends_with("r")))
 ```
 
 
@@ -379,6 +399,7 @@ non_factor_variables <- c("serialid", "tnscntry", "isocntry", "d11", "q1_29",
                           names(data)[startsWith(names(data), "qc5_")],
                           names(data)[startsWith(names(data), "qc12_")],
                           names(data)[startsWith(names(data), "qc13_")],
+                          names(data)[startsWith(names(data), "qc15_")],
                           "d8", "opls")
 factor_variables <- setdiff(names(data), non_factor_variables)
 ```
@@ -402,7 +423,8 @@ data <- data |>
 # Same for sd2_
 data <- data |> 
   mutate(nonEU_national = as.factor(q1_29),
-         across(starts_with("sd2_"), ~ as.factor(.x)))
+         across(starts_with("sd2_"), ~ as.factor(.x))) |> 
+  select(-q1_29)
 ```
 
 ```{r}
@@ -451,6 +473,15 @@ data <- data |>
   select(-starts_with("qc12")) |> 
   select(-starts_with("qc13"))
 # Young and old can probably be discarded, maybe religious can be aggregated
+```
+
+```{r}
+# Supportive of lbtq rights index
+data <- data |> 
+  mutate(across(starts_with("qc15"), ~ if_else(.x == 5, NA, .x))) |>
+  # Scale of 1 to 4, 1 = supportive, 4 = homophobic
+  mutate(antilgbtq_rights = round(rowMeans(cbind(qc15_1, qc15_2, qc15_3), na.rm = TRUE), 2)) |> 
+  select(-starts_with("qc15"))
 ```
 
 
