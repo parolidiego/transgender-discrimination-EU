@@ -26,6 +26,7 @@ library(janitor)
 library(DataExplorer)
 library(countrycode)
 library(explore)
+library(lme4)
 ```
 
 # Loading data
@@ -539,7 +540,7 @@ individuals_df <- clean1 |>
 
 ```
 
-## INITIAL TESTING OF LINEAR MIXED MODELS ON TOY DATA
+## INITIAL TESTING: Classification models for each country
 
 Trying to see how lmm functions work with indiviudal and country level data. 
 
@@ -573,7 +574,8 @@ Now set our test data. for ease, we will remove the UK from the main data then j
 complete_df <- individuals_df |> 
   filter(isocntry != "GB") |> 
   left_join(country_level_testdata, 
-            by = join_by(isocntry == iso2c))
+            by = join_by(isocntry == iso2c)) |> 
+  filter(!is.na(target_var)) # remove NA for our target variable. 
   
 ```
 
@@ -581,8 +583,134 @@ We now have a table to test some glmer modelling on.
 
 We have table of 26,416 row table with 20 columns. This represents 27 countries. 
 
+Following this tutorial Marga sent and applying to the test data: 
+
+https://raffaelevacca.github.io/Intro-multilevel-with-R/
+
+Testing a nested dataset by country
+```{r}
+
+nested.cntry <- complete_df %>% 
+  group_by(isocntry) %>%
+  nest()
+
+# The column nested.df$data is a list of data frames, one for each country
+class(nested.cntry$data) # type, list
+length(nested.cntry$data) # number of countries
+
+# to unnest()
+nested.cntry %>%
+  filter(isocntry == "AT") %>%
+  dplyr::select(isocntry, data) %>%
+  unnest(cols = c(data))
 
 
+```
+
+Using the nested data, we now run a model for each country:
+
+```{r}
+# fit separate lm for each each element of nested.cntry$data)
+lmodels <- nested.cntry %>%
+  # Get all school data frames
+  pull(data) %>%
+  # Run glm() on each via map because it's a classification model
+    # model run against all vairables for now. 
+  purrr::map(~ glm(target_var ~ ., 
+                   data= .x,
+                   family = "binomial"))
+
+# show that it's a list and we can call each elements regression output. 
+class(lmodels)
+lmodels[4]
+```
+
+
+## Basics of Linear mixed models in R
+
+Fixed effects: Things that are the same across the cluster
+Random effects: Things that change within the cluster 
+
+The fixed and random effects could refer to either the intercept or the slope, as these can both vary between groups.
+
+### The names and structure of different LMM models in R: 
+
+#### LMM equation structure in R
+
+To run a multilevel linear model, we use the lmer() function (“Linear Mixed Effects in R”) from the lme4 package. The syntax is similar to regression. 
+everything to the left of the | indicates the effects that should be random, and the variable to the right of the | is the grouping variable across which the effects should vary
+
+*Null model* 
+This has no slope, but random intercepts. It basically just takes the average. It has no independent (X) variables and is the proper naïve model. 
+
+  null_model <- lmer(Y ~ (1|cntry), data = ess)
+
+
+*Random intercept model:* 
+--> Only the intercept differ. The slopes are equal for each group. We assume the same effect of X on Y for each group. Just that the group causes the difference. 
+
+  random_int_model <- lmer(Y ~ X + (1 | group), data=df)
+
+*Random intercept, random slope model* 
+--> Now we also let the slope vary by group. This means each group basically has it's own model. It is 
+
+  random_intslope_model <- lmer(Y ~ X + (X | group), data=df)
+
+For each, Y=target, X = independent vars (can be many)
+
+#### Standard LMM Modelling Strategy
+(sourced from slides here: https://favstats.github.io/intro_multilevel/slides/#54)
+^ This is a useful resource, it goes through an ESS modelling doc 
+
+Approach to multilevel model building based on Hox (2010)
+
+1/  Null Model (Random Intercept only)
+2/ Add independent Level 1 variables
+3/ Add independent Level 2 variables
+4/ Add random slopes
+5/ (Cross-level) interactions
+
+Each step, check whether your model is significantly improved compared to the previous one.
+
+### Basic LMM testing with toy data 
+
+First, null model:
+```{r}
+m_null <- lmer()
+```
+
+Random effects model 
+```{r}
+n_randeffect
+```
+
+*Example Random effects models:* 
+m <- glmer(remission ~ IL6 + CRP + CancerStage + LengthofStay + Experience +
+    (1 | DID), data = hdp, family = binomial, control = glmerControl(optimizer = "bobyqa"),
+    nAGQ = 10)
+
+
+_Useful package for visualising and interpreting linear mixed models:_ 
+Flexplot -> https://github.com/dustinfife/flexplot
+Functions to quickly visualise LMM models and compare their performance.
+
+broom.mixed
+The function broom.mixed::tidy() gives us all model parameters (random and fixed).
+
+
+
+_Useful calculations:_
+  - ICC (intra cluster correlation. How alike each of the observations within each group are)
+  - ANOVA for model comparison: anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
+
+
+
+
+--------------------------------------------------------------------
+
+think the section below is probably redundant now but just leaving until I check properly. 
+
+--------------------------------------------------------------------
 
 ## Remove unwanted variables
 
