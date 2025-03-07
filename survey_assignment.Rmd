@@ -27,6 +27,8 @@ library(DataExplorer)
 library(countrycode)
 library(explore)
 library(lme4)
+library(lmerTest)
+library(broom.mixed)
 ```
 
 # Loading data
@@ -676,21 +678,113 @@ Each step, check whether your model is significantly improved compared to the pr
 
 First, null model:
 ```{r}
-m_null <- lmer()
+m_null <- glmer(target_var ~ (1|isocntry),
+               data = complete_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+summary(m_null)
+```
+
+To come back and reinterpret... don't really know at this stage.
+
+Test flexplot and broom.mixed usage: 
+
+```{r}
+#devtools::install_github("dustinfife/flexplot")
+library(flexplot)
+```
+
+Here it has some examples of code and output for saved logistic model fits
+
+```{r}
+# don't think flexplot will be super useful as we have so many categorical variables
+flexplot::logistic_fit
+flexplot::mixed_logistic
+flexplot::visualize(m_null)
+
+# broom.mixed is used to tidy up the stats outputs into a tibble
+broom.mixed::tidy(m_null) # summary output in tibble
+broom.mixed::glance(m_null) # model performance summary
+
 ```
 
 Random effects model 
+
+- Including individual level variables only with country: 
+
 ```{r}
-n_randeffect
+n_randeffect <- glmer(target_var ~ 
+                        gender + age + I(age^2) + lifesat + religion + class + 
+                        (1|isocntry),
+               data = complete_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
 ```
+This suggests the data needs to be rescaled, to check which variables are the issue:
+```{r}
+library(caret)
+# check for nearzero variance, if so those could be removed
+nearZeroVar(complete_df, saveMetrics = TRUE)
+# see no issues. So all variables stay.
+
+# will recode the numeric variables I selected, which is only age
+scaled_df <- complete_df |> 
+  mutate(across(where(is.numeric), scale))
+
+```
+
+Re check the random effects model with scaled data:
+
+```{r}
+# n_randeffect <- glmer(target_var ~ 
+#                         gender + age + I(age^2) + lifesat + religion + class + 
+#                         (1|isocntry),
+#                data = scaled_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+
+## this took a long time to try run so removed variables. The nAGQ also adds time but fine for now
+
+n_randeffect <- glmer(target_var ~ 
+                        gender + age + I(age^2) + lifesat + (1|isocntry),
+               data = scaled_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+
+
+
+summary(n_randeffect)
+```
+
+Can we interpret this...
+
+```{r}
+
+```
+
+
+
 
 *Example Random effects models:* 
 m <- glmer(remission ~ IL6 + CRP + CancerStage + LengthofStay + Experience +
-    (1 | DID), data = hdp, family = binomial, control = glmerControl(optimizer = "bobyqa"),
+    (1 | DID), data = hdp, 
+    family = binomial, control = glmerControl(optimizer = "bobyqa"),
     nAGQ = 10)
 
+*Example from last year code*
+glm_model_4 <- glmer(binary_qc19 ~ male + d11 + I(d11^2) + political_ideology +
+               Religion_cat + sd1_7_factor + d60_ordinal + qc15_1_ordinal +
+               prop_gndr_bin + prop_dis_wide + Unemployment + (1 | country_name),
+               data = Data, family = binomial, 
+               control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000)))
 
-_Useful package for visualising and interpreting linear mixed models:_ 
+
+
+_Potentially useful package for visualising and interpreting linear mixed models:_ 
 Flexplot -> https://github.com/dustinfife/flexplot
 Functions to quickly visualise LMM models and compare their performance.
 
