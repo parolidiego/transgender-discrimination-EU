@@ -271,6 +271,8 @@ MY VOICE COUNTS
 
 I guess that people that feel alienated from society and politics might be less likely to support lgbtq rights so I took the mean of `d72` question which asked whether you felt like your voice mattered
 
+<br>
+
 OTHERS
 
 `qc11` is a strange question feels useless to me, I removed it for now but we can think about it
@@ -535,12 +537,44 @@ data <- data |>
 
 SITUATION SO FAR
 
-Need to recode correctly all NAs
+This should be our final selection of variables.
 
-Rename columns appropriately
+We still need to rename them appropriately and check that all the NAs are correctly encoded by looking at the summary. Below I left some comments about the things to do to finish the cleaning.
+
+After that we can further discard some due to missingness, multicollinearity, irrelevance.
+
+We need also to build the country level dataframe. Join all the country level data together.
+
+Then next steps would involve imputing NAs, building the country level dataframe and then we can start with correlation, discarding variables and modelling
+
+```{r}
+# TO-DO-LIST
+
+# friends_trans REFUSAL level - leave it like that or NAs?
+
+# sd3 look more into that for NAs or aggregations as not all levels are printed with summary
+
+# qc2_15 we need to adjust the labels: not mentioned=have been discriminated against; No, you haven’t been discriminated against or experienced harassment=no discrimination experienced
+
+# qc10 look more into that for NAs or aggregations as not all levels are printed with summary
+
+#d1r1 correctly encode NAs
+
+#d7r1 correctly encode NAs
+
+#d15a_r2 look more into that for NAs as not all levels are printed with summary
+
+#d60 REFUSAL must be turned into NAs?
+
+#d63 look more into that for NAs as not all levels are printed with summary
+
+# and more? I think this is it
+```
+
 
 ```{r}
 summary(data)
+plot_missing(data)
 ```
 
 
