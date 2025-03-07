@@ -180,27 +180,59 @@ We are discarding all variables that relate to trade and globalization as deemed
 
 We have also not considered questions specifically about Roma ex `qc8` and `qc14` and `qc16`
 
+<br>
+
 Some of the doubts we had:
 
 AGE
 
 ```{r}
-age_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
-ggplot(age_df, aes(x = d11, y = mean)) + geom_point()
+x_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
+ggplot(x_df, aes(x = d11, y = mean)) + geom_point()
 ```
-As relationship seems pretty linear we are going to use the continuous variable for age
+As relationship seems pretty linear we are going to use the continuous variable for age and there seems to be a clear group (1to4) which is the same used in the variable with 3 categories left, center and right so we will use the 3-categories variable
+
+<br>
+
+POLITICAL OPINIONS
+
+```{r}
+x_df <- data_raw |> summarise(mean = mean(qc19), .by = d1)
+ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + xlim(1,10)
+```
+
+For political opinions it seems that the relationship is less linear so we will work on the 5 categories cod
+
+<br>
+
+MARRIAGE
+
+```{r}
+x_df <- data_raw |> summarise(mean = mean(qc19), .by = d7r1)
+ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5)
+```
+
+Of all the possible combinations this one seems the best to highlight differences in our target variable
+
+<br>
 
 NATIONALITY
 
 There is no easy way to create an immigrant dummy by checking whether someone does not have the nationality of the country in which he is being interviewed for the survey. So we are just going to use `q1_29` as a dummy for whether someone owns a non-EU nationality
 
+<br>
+
 POLITICAL INTEREST
 
 Using only `polintr` as a summary of the whole `d71` question about how strong is your interest in politics in various domains
 
+<br>
+
 EXPERIENCED DISCRIMINATION
 
 For the questions about whether you have experienced discrimination `qc2_` I am keeping only `qc2_15` which is a binary on whether you have experienced any discrimination or not and I am not keeping the other categories that allowed us to understand if you had experienced discrimination on the basis of a particular motive. We can probably assume that if a person is a part of a specific minority (info from `sd2`) and is being discriminated is because of being part of that minority (at least in most cases), therefore it felt like information we already had (and which we can easily put in our regression using interaction effects)
+
+<br>
 
 PERCIEVED DISCRIMINATION in country
 
@@ -210,9 +242,43 @@ For the same reason I am also discarding `qc4` that asks whether in your country
 
 And the same reasoning also applies to `qc7` which asks if efforts towards reducing discrimination are effective in your country.
 
+<br>
+
+HOW DISCRIMINATORY ARE YOU score
+
+I use `qc12` and `qc13` to build a score from 1 to 10 of how discriminatory are you against certain minorities. I am building the score for each minority and then we can decide later if some are irrelevant.
+
+Note for some categories this score is a bit stupid (ex. voting for whether you would feel uncomfortable if your child was in a love relationship with a old person would give you a high racist score against old people, this is an example of some of the categories for which it is worth excluding the index)
+
+We can also further aggregate to obtain just one score (or obtain religious/ethnic score etc.). 
+
+Option also to discard them all (anti lgbtqi sentiment is also captured in the next index built from `qc15`)
+
+`qc6` also asks about discriminatory behaviors, but is about elected public official, it does not ask about a situation that impacts you personally. It also uses different categories for minorities therefore I prefer to use `qc12` and `qc13` rather than `qc6`
+
+<br>
+
+SUPPORTIVE OF LGBTQ RIGHTS INDEX
+
+Using `qc15` we can again build an index for how supportive of lgbtq rights a person is. 
+
+I again choose to take the mean across the different answers but we could also use median/mode if we think is better
+
+If we feel each or some answers are particularly useful (given they are closely related with our target variable) we can also use them separately 
+
+We could also use `qc18` to try to capture anti lgbtq sentiment, but I preferred `qc15` as it seemed more straightforward (I therfore deleted `qc18`, but we can put it back if useful)
+
+<br>
+
+MY VOICE COUNTS
+
+I guess that people that feel alienated from society and politics might be less likely to support lgbtq rights so I took the mean of `d72` question which asked whether you felt like your voice mattered
+
 OTHERS
 
 `qc11` is a strange question feels useless to me, I removed it for now but we can think about it
+
+I also removed `qc9` as I don't really know what to do with it and `qc17`
 
 ```{r}
 data <- data_raw |> 
@@ -228,25 +294,20 @@ data <- data_raw |>
          qc2_15, # experienced discrimination yourself
          qc3, # where discrimination took place
          starts_with("qc5"), # actions against discrimination
-         starts_with("qc6"), # feelings about minority becoming elected official
-         starts_with("qc9"), # opinion about diversity in the workplace
          qc10, # how would you report discrimination
          starts_with("qc12"), # feelings about colleagues being minority
          starts_with("qc13"), # feelings about kid being in a relationship with minority
          starts_with("qc15"), # opinions about lgbtqi 
-         starts_with("qc17"), # information about minorities in school
-         starts_with("qc18"), # feelings about public affection
          qc19, # target variable transgender
          qc20, # non-binary genders in documents
-         d1, d1r1, d1r2, # political ideology
-         d7, d7r1, d7r2, d7r3, # marital status
+         d1r1, # political ideology
+         d7r1, # marital status
          d10, # gender binary
-         starts_with("d8"), # eduaction 
-         starts_with("d15"), # occupation
+         d8, # eduaction 
+         d15a_r2, # current occupation (discarded previous occupation d15b)
          d25, # rural vs urban
-         starts_with("d43"), # phones availiabilty
+         d43t, # phones availiabilty
          d60, # financial stress (paying bills)
-         starts_with("d62"), # internet use
          netuse, # internet index
          d63, # social class
          starts_with("d72"), # my voice counts
@@ -270,11 +331,16 @@ Removing some of the previously selected variables
 `sd2_9` refusal to respond, 
 `sd2_10` DK answers
 `sd2t` summary binary variable for being part of any minority (we are going to keep the more specific one)
+
+I also remove `qc12_nr` as I prefer to work on the full variable instead of the recoded version with less categories. Same for `qc13` and `qc18`
   
 ```{r}
 data <- data |> 
-  select(-c(sd2_7, sd2_8, sd2_9, sd2_10, sd2t))
-# Keep in mind that sd2t does not have NAs so we might want to use that instead of the more specific ones
+  # Keep in mind that sd2t does not have NAs so we might want to use that instead of the more specific ones
+  select(-c(sd2_7, sd2_8, sd2_9, sd2_10, sd2t)) |> 
+  select(-(starts_with("qc12") & ends_with("r"))) |> 
+  select(-(starts_with("qc13") & ends_with("r"))) |> 
+  select(-(starts_with("qc18") & ends_with("r")))
 ```
 
 
@@ -366,6 +432,10 @@ non_factor_variables <- c("serialid", "tnscntry", "isocntry", "d11", "q1_29",
                           names(data)[startsWith(names(data), "sd1_")],
                           names(data)[startsWith(names(data), "sd2_")],
                           names(data)[startsWith(names(data), "qc5_")],
+                          names(data)[startsWith(names(data), "qc12_")],
+                          names(data)[startsWith(names(data), "qc13_")],
+                          names(data)[startsWith(names(data), "qc15_")],
+                          names(data)[startsWith(names(data), "d72_")],
                           "d8", "opls")
 factor_variables <- setdiff(names(data), non_factor_variables)
 ```
@@ -382,15 +452,22 @@ data <- data |>
 # Converting to numeric the variables that should be numeric
 # They are already numeric but they carry with them some labels as well that only confuse us, by doing this I remove the labels
 data <- data |> 
-  mutate(d11 = as.numeric(d11),
-         d8 = as.numeric(d8))
+  mutate(age = as.numeric(d11),
+         years_edu = as.numeric(d8)) |> 
+  # Recoding correctly d8 education variable according to unique(data_raw$d11))
+  mutate(years_edu = case_when(
+    years_edu %in% c(0, 99) ~ NA, # Refusal and DK as NAs
+    years_edu == 97 ~ 0, # No full time education = 0
+    years_edu == 98 ~ age, # still studying = age
+    TRUE ~ years_edu)) |> 
+  select(-c(d11, d8))
 
 # Converting q1_29 to factor without assigning labels (1 if non-Eu nationality, 0 if EU nationality)
 # Same for sd2_
 data <- data |> 
   mutate(nonEU_national = as.factor(q1_29),
-         across(starts_with("sd2_"), ~ as.factor(.x)))
-
+         across(starts_with("sd2_"), ~ as.factor(.x))) |> 
+  select(-q1_29)
 ```
 
 ```{r}
@@ -398,7 +475,6 @@ data <- data |>
 data <- data |>  
   mutate(across(starts_with("sd1"), ~ if_else(.x == 1, 1, 0))) |> 
   mutate(friends_minorities = sd1_1+sd1_2+sd1_3+sd1_4+sd1_5+sd1_6+sd1_8) |> 
-  mutate(friends_minorities = as.factor(friends_minorities)) |> 
   relocate(friends_minorities, .before="sd1_1") |> 
   select(-starts_with("sd1"))
 
@@ -406,24 +482,73 @@ data <- data |>
 data <- data |>  
   mutate(across(starts_with("qc5"), ~ if_else(.x == 1, 1, 0))) |> 
   mutate(n_actions_against_discri = qc5_1+qc5_2+qc5_3+qc5_4) |> 
-  mutate(n_actions_against_discri = as.factor(n_actions_against_discri)) |> 
   relocate(n_actions_against_discri, .after="qc3") |> 
   select(-starts_with("qc5"))
 ```
 
+```{r}
+# Building a discriminatory score
+data <- data |> 
+  # Coding as NAs it depends and DK
+  mutate(across(starts_with("qc12"), ~ if_else(.x >= 12, NA, .x))) |> 
+  mutate(across(starts_with("qc13"), ~ if_else(.x >= 12, NA, .x))) |> 
+  # Coding as 5 responses = indifferent
+  mutate(across(starts_with("qc12"), ~ if_else(.x == 11, 5, .x))) |> 
+  mutate(across(starts_with("qc13"), ~ if_else(.x == 11, 5, .x))) |> 
+  # Modifying such that higher is more discriminatory
+  mutate(roma_discri = 11 - rowMeans(cbind(qc12_1, qc13_1), na.rm = TRUE),
+         black_discri = 11 - rowMeans(cbind(qc12_2, qc13_2), na.rm = TRUE),
+         asian_discri = 11 - rowMeans(cbind(qc12_3, qc13_3), na.rm = TRUE),
+         white_discri = 11 - rowMeans(cbind(qc12_4, qc13_4), na.rm = TRUE),
+         jewish_discri = 11 - rowMeans(cbind(qc12_5, qc13_5), na.rm = TRUE),
+         muslim_discri = 11 - rowMeans(cbind(qc12_6, qc13_6), na.rm = TRUE),
+         buddihst_discri = 11 - rowMeans(cbind(qc12_7, qc13_7), na.rm = TRUE),
+         christian_discri = 11 - rowMeans(cbind(qc12_8, qc13_8), na.rm = TRUE),
+         atheist_discri = 11 - rowMeans(cbind(qc12_9, qc13_9), na.rm = TRUE),
+         lgb_discri = 11 - rowMeans(cbind(qc12_10, qc13_10), na.rm = TRUE),
+         trans_discri = 11 - rowMeans(cbind(qc12_11, qc13_11), na.rm = TRUE),
+         intersex_discri = 11 - rowMeans(cbind(qc12_12, qc13_12), na.rm = TRUE),
+         disability_discri = 11 - rowMeans(cbind(qc12_13, qc13_13), na.rm = TRUE),
+         young_discri = 11 - rowMeans(cbind(qc12_14, qc13_14), na.rm = TRUE),
+         old_discri = 11 - rowMeans(cbind(qc12_15, qc13_15), na.rm = TRUE)) |> 
+  select(-starts_with("qc12")) |> 
+  select(-starts_with("qc13"))
+# Young and old can probably be discarded, maybe religious can be aggregated
+```
 
-Next I should be aggregating some of the discriminatory questions
+```{r}
+# Supportive of lbtq rights index
+data <- data |> 
+  mutate(across(starts_with("qc15"), ~ if_else(.x == 5, NA, .x))) |>
+  # Scale of 1 to 4, 1 = supportive, 4 = homophobic
+  mutate(antilgbtq_rights = round(rowMeans(cbind(qc15_1, qc15_2, qc15_3), na.rm = TRUE), 2)) |> 
+  select(-starts_with("qc15"))
+```
 
-Until `qc6` dataset should be clean. Start from there and try to aggregate responses from qc6, qc12 and qc13
+```{r}
+# My voice counts
+data <- data |> 
+  mutate(across(starts_with("d72"), ~ if_else(.x > 4, NA, .x))) |>
+  mutate(social_alienation = rowMeans(cbind(d72_1, d72_2), na.rm = TRUE)) |> 
+  select(-starts_with("d72"))
+# The higher the more people think their voice does not matter
+```
 
-Not sure what to do with qc9
+<br><br>
+
+SITUATION SO FAR
+
+Need to recode correctly all NAs
+
+Rename columns appropriately
+
+```{r}
+summary(data)
+```
 
 
 
-
-
-
-
+ <br><br><br><br> 
 
 
 We should be checking whether there are other levels for different variables that need special treatments (such as refuse to respond, should we turn those into NAs?). We can do this by looking at the summary below
