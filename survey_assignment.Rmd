@@ -215,7 +215,7 @@ OTHERS
 data <- data_raw |> 
   select(serialid, # unique identifier
          isocntry, # 2 digit country code
-         d11, # age variables
+         starts_with("d11"), # age variables
          q1_29, # nationality of interviewee. options given: EU28+Other+DK, using only other = outside of EU
          d70, #life satisfaction
          polintr, # political interest index (summarizes d71 questions)
@@ -387,6 +387,7 @@ data <- data |>
 data <- data |> 
   mutate(nonEU_national = as.factor(q1_29),
          across(starts_with("sd2_"), ~ as.factor(.x)))
+
 ```
 
 ```{r}
@@ -497,47 +498,91 @@ interview, respondent cooperation, location vars, interviewer number.
 Select and rename these key variables:
 
 ```{r}
-# individuals_df <- data_raw |> 
-#   
-#   #use select function and rename all the in scope variables 
-#   select(
-#       uniqid, 
-#       isocntry,
-#       countryid,
-#       country_names,
-#         
-#     
-#       target_var = qc19,
-#       
-#     # socioeconomic variables for individuals 
-#       gender = d10,
-#       age = d11,
-#       age_4cat = d11r1,
-#       age_6cat = d11r2,
-#       age_7cat = d11r3,
-#       polit_ideology = d1,
-#       educ_5cat = d8r2, # all the education vars have low cutoffs 
-#       educ_11cat = d8r1,
-#       lifesat = d70,
-#       religion = sd3, 
-#       class = d63,
-#       occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
-#       financialstress = d60, #difficulty paying bills
-#       polintr, # no need to rename political interest var
-#       
-#     # paradata variables   
-#       int_date = p1,
-#       int_time = p2,
-#       int_length = p3r, #using recoded var instead of base p3 
-#       int_ppl_present = p4,
-#       int_resp_coop = p5,
-#       int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
-#       #p7 not useful, location, no data for p8-11
-#       
-#       #p13 is language of interview. Probably not useful? 
-#       )
+individuals_df <- clean1 |>
+
+  #use select function and rename all the in scope variables
+  select(
+      isocntry,
+      # countryid,
+      # country_names,
+
+
+      target_var = qc19,
+
+    # socioeconomic variables for individuals
+      gender = d10,
+      age = d11,
+      age_4cat = d11r1,
+      age_6cat = d11r2,
+      age_7cat = d11r3,
+      polit_ideology = d1,
+      educ_5cat = d8r2, # all the education vars have low cutoffs
+      educ_11cat = d8r1,
+      lifesat = d70,
+      religion = sd3,
+      class = d63,
+      occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
+      financialstress = d60, #difficulty paying bills
+      polintr # no need to rename political interest var
+
+    # # paradata variables
+    #   int_date = p1,
+    #   int_time = p2,
+    #   int_length = p3r, #using recoded var instead of base p3
+    #   int_ppl_present = p4,
+    #   int_resp_coop = p5,
+    #   int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
+    #   #p7 not useful, location, no data for p8-11
+    # 
+    #   #p13 is language of interview. Probably not useful?
+      )
 
 ```
+
+## INITIAL TESTING OF LINEAR MIXED MODELS ON TOY DATA
+
+Trying to see how lmm functions work with indiviudal and country level data. 
+
+The primary package we will use is the lme4 package. 
+
+The toy data will be the individuals_df data from above, but joined on, will be the country level indicators. I am going to ignore the UK for now just for convenience and focus on modelling. UK data should be available later 
+
+First, create a country level table for all the data of interest: 
+
+```{r}
+country_level_data <- codelist |> 
+  left_join(gdp_data, by = join_by(country.name.en == country)) |> 
+  left_join(rural_data, by = join_by(iso3c == country_code)) |> 
+  # left_join(marriage_data, by = join_by(country.name.en == Country)) |> # excluding the marriage data for now because it has multiple variables for the same country
+  left_join(democracy_index, by = join_by(iso3c == country_code)) |> 
+  left_join(gequality_index, by = join_by(country.name.en == country_name))
+
+country_level_testdata <- country_level_data |> 
+  select(iso2c, 
+         gdp_pc, 
+         #marriage_stat = Status, #rename
+         rural_pop_percentage, 
+         democracy_index, 
+         overall_gender_equality_index)
+```
+
+Now set our test data. for ease, we will remove the UK from the main data then join on all others (as UK has some NA obs for gender equality index + gdp to be amended)
+
+```{r}
+
+complete_df <- individuals_df |> 
+  filter(isocntry != "GB") |> 
+  left_join(country_level_testdata, 
+            by = join_by(isocntry == iso2c))
+  
+```
+
+We now have a table to test some glmer modelling on. 
+
+We have table of 26,416 row table with 20 columns. This represents 27 countries. 
+
+
+
 
 ## Remove unwanted variables
 
@@ -558,7 +603,7 @@ the `polintr` variable.
 ```{r}
 id_vars <- c("studyno1", "studyno2", "doi", "version", "edition", "survey", "caseid", "uniqid", "serialid", "tnscntry", "country")
 # remove ID vars
-clean1 <- data_raw |> 
+clean1 <- data |> 
   select(-any_of(id_vars))
 
 #remove nationality variable (q1). Later, if we decide we need an immigration variable, we can impute national level data.  
