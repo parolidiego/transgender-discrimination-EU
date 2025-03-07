@@ -175,6 +175,8 @@ we think they're useful or if we can discard some/all of them.
 
 We are discarding all variables that relate to trade and globalization as deemed not relevant for our analysis `qa`. We are also discarding variales related to energy policies `qb`.
 
+We have also not considered questions specifically about Roma ex `qc8` and `qc14` and `qc16`
+
 Some of the doubts we had:
 
 AGE
@@ -201,7 +203,13 @@ PERCIEVED DISCRIMINATION in country
 
 This is a question (`qc1`) about how widespread you perceived discrimination is in your country. It is a rather peculiar question because it asks indiviudals for perception at the country level. I think it might be more useful (by aggregating results by country) to use it to build a country level indicator of perceived discrimination against certain minorities that are of our interest rather than use it as an individual level variable. So I will keep them out of the dataset for now
 
-For the same reason I am also discarding `qc_4` that asks whether in your country you feel like candidates with certain characteristics would be at a disadvantage in the recruitment process. It still basically asks about perceived discrimination at the country level.
+For the same reason I am also discarding `qc4` that asks whether in your country you feel like candidates with certain characteristics would be at a disadvantage in the recruitment process. It still basically asks about perceived discrimination at the country level.
+
+And the same reasoning also applies to `qc7` which asks if efforts towards reducing discrimination are effective in your country.
+
+OTHERS
+
+`qc11` is a strange question feels useless to me, I removed it for now but we can think about it
 
 ```{r}
 data <- data_raw |> 
@@ -218,10 +226,8 @@ data <- data_raw |>
          qc3, # where discrimination took place
          starts_with("qc5"), # actions against discrimination
          starts_with("qc6"), # feelings about minority becoming elected official
-         starts_with("qc7"), # feelings about efforts against discrimination
          starts_with("qc9"), # opinion about diversity in the workplace
          qc10, # how would you report discrimination
-         starts_with("qc11"), # willingness to reveal sensitive information
          starts_with("qc12"), # feelings about colleagues being minority
          starts_with("qc13"), # feelings about kid being in a relationship with minority
          starts_with("qc15"), # opinions about lgbtqi 
@@ -230,7 +236,7 @@ data <- data_raw |>
          qc19, # target variable transgender
          qc20, # non-binary genders in documents
          d1, d1r1, d1r2, # political ideology
-         starts_with("d7"), # marital status
+         d7, d7r1, d7r2, d7r3, # marital status
          d10, # gender binary
          starts_with("d8"), # eduaction 
          starts_with("d15"), # occupation
@@ -241,8 +247,6 @@ data <- data_raw |>
          netuse, # internet index
          d63, # social class
          starts_with("d72"), # my voice counts
-         d77, # convincing other people of your opinion 
-         opls, # opinion leadership index
          # nuts, nutslvl, # region in which interview is carried out?
          # cntry_de useful?
          # starts_with("eu"), # groups by eu/eurozone memberships
@@ -358,33 +362,10 @@ data <- data |>
 non_factor_variables <- c("serialid", "tnscntry", "isocntry", "d11", "q1_29", 
                           names(data)[startsWith(names(data), "sd1_")],
                           names(data)[startsWith(names(data), "sd2_")],
+                          names(data)[startsWith(names(data), "qc5_")],
                           "d8", "opls")
 factor_variables <- setdiff(names(data), non_factor_variables)
 ```
-
-The factors variables will be cleaned below
-
-The rest of the variables:
-
-`serialid` does not need any cleaning
-
-`isocntry` does not need any further cleaning
-
-`d11` does not need any further cleaning
-
-`q1_n` are dummy variables for nationality, but one can have more than one nationality so I don't know how to clean those variables. Probably better to discard them all or to just use them for creating a variable for being a foreigner from outside of the EU (`q1_29`)
-
-`sd2_n` again are dummies for whether you consider yourself to be a part of different minorities. One can fit into multiple categories tho. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is also worth considering to remove `sd2_7` to `sd2_10` and `sd2t`
-
-`qc2_n` are dummies for whether you have experienced discrimination on the basis of different reasons. Same here, one can have experienced discrimination because of more than one reason, multiple options are allowed. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is worth considering to remove `qc2_14` to `qc2_16`
-
-`qc4_n` are dummies for whether you think people would be disadvantaged during the recruitment process for being a minority. Same here, one can have experienced disadvantages because of more than one reason, multiple options are allowed. So for this variable it is probably better to leave them like this as dummy variables (factorize them, but not add their labels). It is probably worth removing `qc4_16` to `qc4_18` and consider whether to use or not `qc4t_1` `qc4t_2` `qc4t_3`
-
-`d8` does not need any cleaning
-
-`opls` does not need any cleaning. In case we want to use it, it needs to be factorized and we should consider assigning to it decent labels. 1 is a person that talks often about his opinion while 4 is a person that does not.
-
-I now proceed to factorize and assign labels to all those variables for which within the attributes of the dataframe there were meaningful labels.
 
 ```{r}
 # Converting them to factors and assign them their labels automatically
@@ -413,9 +394,31 @@ data <- data |>
 data <- data |>  
   mutate(across(starts_with("sd1"), ~ if_else(.x == 1, 1, 0))) |> 
   mutate(friends_minorities = sd1_1+sd1_2+sd1_3+sd1_4+sd1_5+sd1_6+sd1_8) |> 
+  mutate(friends_minorities = as.factor(friends_minorities)) |> 
   relocate(friends_minorities, .before="sd1_1") |> 
   select(-starts_with("sd1"))
+
+# Creating a variable that counts the number of actions against discrimination that you have taken in the last year
+data <- data |>  
+  mutate(across(starts_with("qc5"), ~ if_else(.x == 1, 1, 0))) |> 
+  mutate(n_actions_against_discri = qc5_1+qc5_2+qc5_3+qc5_4) |> 
+  mutate(n_actions_against_discri = as.factor(n_actions_against_discri)) |> 
+  relocate(n_actions_against_discri, .after="qc3") |> 
+  select(-starts_with("qc5"))
 ```
+
+
+Next I should be aggregating some of the discriminatory questions
+
+Until `qc6` dataset should be clean. Start from there and try to aggregate responses from qc6, qc12 and qc13
+
+Not sure what to do with qc9
+
+
+
+
+
+
 
 
 
@@ -424,10 +427,10 @@ We should be checking whether there are other levels for different variables tha
 First let's change the name and try to clean them to get to significant names
 
 ```{r}
-colnames(data) <- variable_names$var_full_name
-
-data <- data |> 
-  clean_names()
+# colnames(data) <- variable_names$var_full_name
+# 
+# data <- data |> 
+#   clean_names()
 ```
 
 
