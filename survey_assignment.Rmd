@@ -677,8 +677,10 @@ data <- data |>
 
 <br><br>
 
+<<<<<<< Updated upstream
 SITUATION SO FAR
 
+<<<<<<< Updated upstream
 This should be our final selection of variables.
 
 We still need to rename them appropriately and check that all the NAs are correctly encoded by looking at the summary. Below I left some comments about the things to do to finish the cleaning.
@@ -712,9 +714,38 @@ Then next steps would involve imputing NAs, building the country level dataframe
 
 # and more? I think this is it
 ```
+=======
+Need to recode correctly all NAs
+=======
+Recoding correclty all NAs
+
+Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
+
+```{r}
+
+factor_variables <- names(data)[sapply(data, is.factor)]
+print(setdiff(factor_variables, "qc19"))
+
+data <- data %>%
+  mutate(across(
+    all_of(setdiff(factor_variables, "friends_trans")),  # Exclude "friends_trans"
+    ~ {
+      refusal_levels <- grep("REFUSAL", levels(.), value = TRUE, ignore.case = TRUE)  # Look for levels that contain "REFUSAL"
+      if (length(refusal_levels) > 0) {  # If there are levels containing "REFUSAL"
+        fct_recode(., NULL = refusal_levels)  # Convert in NA
+      } else {
+        .  # if not remain without changes
+      }
+    }
+  ))
+
+```
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
 
 
 ```{r}
+<<<<<<< Updated upstream
 summary(data)
 plot_missing(data)
 ```
@@ -866,6 +897,56 @@ head(data)
 summary(data)
 plot_missing(data)
 ```
+=======
+data <- data |> 
+  rename(
+    country = isocntry,
+    life_sat = d70,
+    ethnic_minority = sd2_1,
+    skincolor_minority = sd2_2,
+    religious_minority = sd2_3,
+    roma_minority = sd2_4,
+    sexual_minority = sd2_5,
+    disability_minority = sd2_6,
+    religion = sd3,
+    disc_no = qc2_15,
+    disc_where = qc3,
+    disc_contact = qc10,
+    trans_docs = qc19,
+    gender_docs = qc20,
+    left_right = d1r1,
+    marital_status = d7r1,
+    gender = d10,
+    occupation = d15a_r2,
+    community = d25,
+    phone_access = d43t,
+    bill_issues = d60,
+    internet_use = netuse,
+    social_class = d63
+  )
+
+```
+
+
+Adding a dummy variable for gender (i am keeping the original one in case is useful)
+
+```{r}
+data$man <- ifelse(data$gender == "Man", 1, 0)
+
+```
+
+
+Now, we will transform the variable disc_no, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward.
+
+```{r}
+
+data <- data |> 
+  mutate(suffered_discr = ifelse(disc_no == "Not mentioned", 1, 0)) |> 
+  select(-disc_no) 
+
+```
+
+>>>>>>> Stashed changes
 
 # Identify key socio-demogrpahic variables
 
