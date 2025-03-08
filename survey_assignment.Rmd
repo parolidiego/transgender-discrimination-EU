@@ -26,6 +26,9 @@ library(janitor)
 library(DataExplorer)
 library(countrycode)
 library(explore)
+library(lme4)
+library(lmerTest)
+library(broom.mixed)
 ```
 
 # Loading data
@@ -38,20 +41,39 @@ data_raw <- read_dta("ZA7575.dta")
 
 ## Country-level data
 
-### GDP per capita
+This is for joins:
+```{r}
+# builidng a df with country names and codes for the EU-28
+codelist <- countrycode::codelist |> 
+  select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
+  filter(!is.na(eu28)) 
+```
 
-Retrieved from Eurostat (<https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en>) for the year 2019.
+### GDP per capita, PPP (constant 2021 international $)
+
+Retrieved from the World Bank (<https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD>) for the year 2019.
 
 ```{r}
-gdp_data <- read_xlsx("gdp_pc_2019.xlsx", sheet = 3, range = "A11:B39", col_names = c("country", "gdp_pc"))
+gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4)
+
+head(gdp_data)
+
+gdp_data <- gdp_data |> 
+  select(`Country Name`, `Country Code`, `2019`)
+
+
+gdp_data <- gdp_data |> 
+  rename(country_name = `Country Name`,
+         country_code = `Country Code`,
+         gdp_pc_ppp = `2019`)
+
+gdp_data <- gdp_data |> 
+inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+
 str(gdp_data)
 ```
 
-1)  United Kingdom is missing from this dataset as well as from a few others in Eurostat (we might have to find it somewhere else).
-
-2)  Data needs further cleaning
-
-3)  Reflect whether we might be better suited with other measures of GDP (GDP at PPP)
+We now have 28 observations including the UK.
 
 ### Rural population
 
@@ -61,6 +83,7 @@ Data on the % of population living in rural areas over total population.
 
 ```{r}
 rural_data <- read_xls("rural_pop.xls", sheet = 1, range = "A4:BL270")
+head(rural_data)
 
 # selecting only the relevant year
 rural_data <- rural_data |> 
@@ -68,13 +91,9 @@ rural_data <- rural_data |>
   clean_names() |> 
   rename("rural_pop_percentage" = "x2019")
 
-# builidng a df with country names and codes for the EU-28
-codelist <- countrycode::codelist |> 
-  select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
-  filter(!is.na(eu28)) 
-
 rural_data <- rural_data |> 
   inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+
 str(rural_data)
 ```
 
@@ -104,8 +123,11 @@ marriage_data <- marriage_data |>
 # keeping only eu-28 countries 
 marriage_data <- marriage_data |> 
   inner_join(select(codelist, cow.name), by = c("Country" = "cow.name"))
+
 str(marriage_data)
 ```
+
+
 
 This variable could be recoded as either ordinal, categorical (both factor) or logical.
 
@@ -121,23 +143,69 @@ According to this test, Croatia, Hungary, Latvia and Slovakia have two different
 
 Diego: the thing is that countries can at the same time have a constitutional ban on marriage and still have legally recognized civil unions. Thus maybe we should exclude this level from this variable as it is not exclusive. The lowest level would remain no recognition.
 
-### Gender Equality Index
++Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
 
-Developed by the European Institute for Gender Equality. Retrieved from <https://eige.europa.eu/gender-statistics/dgs/indicator/index__index_scores/datatable> for the year 2019.
+
+
+//////////
+
+The table is up to date, so I had to check (on Wikipedia honestly) what year each of those items was actually legalized and I got to this:
+-----------------------------same sex marriage-----------------------------
+Greece: civil unions since 2015, marriage since 2024
+Estonia: civil unions since 2016, marriage since 2024
+Slovenia: civil unions since 2017, marriage since 2022
+United Kingdom: marriage since 2014 in England, Scotland and Wales, and since 2020 in Northern Ireland. Civil unions since 2005
+---------------------------------civil unions-----------------------------------
+Latvia: civil unions since 2024, the Constitution prohibits the recognition of same sex marriage since 2006.
+
 
 ```{r}
-# cleaning the data
-gequality_index <- read_xlsx("gender_equality_index_scores.xlsx", range = "A16:V44")
-names(gequality_index) <- names(gequality_index) %>%
-  janitor::make_clean_names() %>%
-  gsub("_score$", "", .)
+marriage_data <- marriage_data |> 
+  mutate(Status = case_when(
+    Country == "Greece" ~ "Civil Unions",
+    Country == "Estonia" ~ "Civil Unions",
+    Country == "Slovenia" ~ "Civil Unions",
+    Country == "United Kingdom" ~ "Civil Unions" ,  # I understand that same-sex marriage wasn't legal in the UK until it was legalised in all of its territories, but this can be discussed
+    Country == "Latvia" & Status == "Civil unions" ~ "No recognition", # only mutate one of the rows that Latvia is in
+    # Latvia had no recognition prior to 2024, but it has a constitutional ban on marriage, which is a category that we found alongside others in some observations, so we'll keep two rows for Latvia for now
+    TRUE ~ Status
+  ))
 
-gequality_index <- gequality_index |>  
-  rename(country_name = geographic_region_sub_domain_scores)
-str(gequality_index)
+marriage_data |> filter(Country %in% c("Latvia", "Greece", "Estonia", "Slovenia", "United Kingdom"))
 ```
 
-No UK in this datset (28 rows because it is present a row about EU as a whole)
+I also found this LGBT rights index on Our World in Data (<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures whether LGBT+ people enjoy the same rights as cisgender people combining information on 18 different policies. It includes the legal status of same-sex marriage so we might keep only one of these.
+```{r}
+lgbt_rights_index <- read.csv("lgbt-rights-index.csv")
+
+lgbt_rights_index <- lgbt_rights_index |> 
+  filter(Year == 2019) |> 
+  inner_join(select(codelist, iso3c), by = c("Code" = "iso3c")) |> 
+  select(-Year) # all observations are from 2019
+
+str(lgbt_rights_index)
+```
+
+
+### Gender related tables
+
+Gender Development and Gender Inequality indexes, developed by the United Nations Development. Retrieved from <https://hdr.undp.org/data-center/documentation-and-downloads> for the year 2019.
+
+```{r}
+gender_index <- read_xlsx("UNDP_gender_indexes.xlsx")
+
+gender_index <- gender_index |>
+  select(-dimension, -note, -year) |> # empty/useless columns
+  inner_join(select(codelist, iso3c), by = c("countryIsoCode" = "iso3c"))
+
+gender_index |> 
+  distinct(country) |> 
+  nrow()
+
+str(gender_index)
+```
+This dataset now has 560 rows for the EU-28 countries, it has many indicators apart from the indexes values, which we will have to decide if we keep or not.
+
 
 ### Economist's Democracy Index
 
@@ -623,47 +691,310 @@ interview, respondent cooperation, location vars, interviewer number.
 Select and rename these key variables:
 
 ```{r}
-# individuals_df <- data_raw |> 
-#   
-#   #use select function and rename all the in scope variables 
-#   select(
-#       uniqid, 
-#       isocntry,
-#       countryid,
-#       country_names,
-#         
-#     
-#       target_var = qc19,
-#       
-#     # socioeconomic variables for individuals 
-#       gender = d10,
-#       age = d11,
-#       age_4cat = d11r1,
-#       age_6cat = d11r2,
-#       age_7cat = d11r3,
-#       polit_ideology = d1,
-#       educ_5cat = d8r2, # all the education vars have low cutoffs 
-#       educ_11cat = d8r1,
-#       lifesat = d70,
-#       religion = sd3, 
-#       class = d63,
-#       occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
-#       financialstress = d60, #difficulty paying bills
-#       polintr, # no need to rename political interest var
-#       
-#     # paradata variables   
-#       int_date = p1,
-#       int_time = p2,
-#       int_length = p3r, #using recoded var instead of base p3 
-#       int_ppl_present = p4,
-#       int_resp_coop = p5,
-#       int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
-#       #p7 not useful, location, no data for p8-11
-#       
-#       #p13 is language of interview. Probably not useful? 
-#       )
+individuals_df <- clean1 |>
+
+  #use select function and rename all the in scope variables
+  select(
+      isocntry,
+      # countryid,
+      # country_names,
+
+
+      target_var = qc19,
+
+    # socioeconomic variables for individuals
+      gender = d10,
+      age = d11,
+      age_4cat = d11r1,
+      age_6cat = d11r2,
+      age_7cat = d11r3,
+      polit_ideology = d1,
+      educ_5cat = d8r2, # all the education vars have low cutoffs
+      educ_11cat = d8r1,
+      lifesat = d70,
+      religion = sd3,
+      class = d63,
+      occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
+      financialstress = d60, #difficulty paying bills
+      polintr # no need to rename political interest var
+
+    # # paradata variables
+    #   int_date = p1,
+    #   int_time = p2,
+    #   int_length = p3r, #using recoded var instead of base p3
+    #   int_ppl_present = p4,
+    #   int_resp_coop = p5,
+    #   int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
+    #   #p7 not useful, location, no data for p8-11
+    # 
+    #   #p13 is language of interview. Probably not useful?
+      )
 
 ```
+
+## INITIAL TESTING: Classification models for each country
+
+Trying to see how lmm functions work with indiviudal and country level data. 
+
+The primary package we will use is the lme4 package. 
+
+The toy data will be the individuals_df data from above, but joined on, will be the country level indicators. I am going to ignore the UK for now just for convenience and focus on modelling. UK data should be available later 
+
+First, create a country level table for all the data of interest: 
+
+```{r}
+country_level_data <- codelist |> 
+  left_join(gdp_data, by = join_by(country.name.en == country)) |> 
+  left_join(rural_data, by = join_by(iso3c == country_code)) |> 
+  # left_join(marriage_data, by = join_by(country.name.en == Country)) |> # excluding the marriage data for now because it has multiple variables for the same country
+  left_join(democracy_index, by = join_by(iso3c == country_code)) |> 
+  left_join(gequality_index, by = join_by(country.name.en == country_name))
+
+country_level_testdata <- country_level_data |> 
+  select(iso2c, 
+         gdp_pc, 
+         #marriage_stat = Status, #rename
+         rural_pop_percentage, 
+         democracy_index, 
+         overall_gender_equality_index)
+```
+
+Now set our test data. for ease, we will remove the UK from the main data then join on all others (as UK has some NA obs for gender equality index + gdp to be amended)
+
+```{r}
+
+complete_df <- individuals_df |> 
+  filter(isocntry != "GB") |> 
+  left_join(country_level_testdata, 
+            by = join_by(isocntry == iso2c)) |> 
+  filter(!is.na(target_var)) # remove NA for our target variable. 
+  
+```
+
+We now have a table to test some glmer modelling on. 
+
+We have table of 26,416 row table with 20 columns. This represents 27 countries. 
+
+Following this tutorial Marga sent and applying to the test data: 
+
+https://raffaelevacca.github.io/Intro-multilevel-with-R/
+
+Testing a nested dataset by country
+```{r}
+
+nested.cntry <- complete_df %>% 
+  group_by(isocntry) %>%
+  nest()
+
+# The column nested.df$data is a list of data frames, one for each country
+class(nested.cntry$data) # type, list
+length(nested.cntry$data) # number of countries
+
+# to unnest()
+nested.cntry %>%
+  filter(isocntry == "AT") %>%
+  dplyr::select(isocntry, data) %>%
+  unnest(cols = c(data))
+
+
+```
+
+Using the nested data, we now run a model for each country:
+
+```{r}
+# fit separate lm for each each element of nested.cntry$data)
+lmodels <- nested.cntry %>%
+  # Get all school data frames
+  pull(data) %>%
+  # Run glm() on each via map because it's a classification model
+    # model run against all vairables for now. 
+  purrr::map(~ glm(target_var ~ ., 
+                   data= .x,
+                   family = "binomial"))
+
+# show that it's a list and we can call each elements regression output. 
+class(lmodels)
+lmodels[4]
+```
+
+
+## Basics of Linear mixed models in R
+
+Fixed effects: Things that are the same across the cluster
+Random effects: Things that change within the cluster 
+
+The fixed and random effects could refer to either the intercept or the slope, as these can both vary between groups.
+
+### The names and structure of different LMM models in R: 
+
+#### LMM equation structure in R
+
+To run a multilevel linear model, we use the lmer() function (“Linear Mixed Effects in R”) from the lme4 package. The syntax is similar to regression. 
+everything to the left of the | indicates the effects that should be random, and the variable to the right of the | is the grouping variable across which the effects should vary
+
+*Null model* 
+This has no slope, but random intercepts. It basically just takes the average. It has no independent (X) variables and is the proper naïve model. 
+
+  null_model <- lmer(Y ~ (1|cntry), data = ess)
+
+
+*Random intercept model:* 
+--> Only the intercept differ. The slopes are equal for each group. We assume the same effect of X on Y for each group. Just that the group causes the difference. 
+
+  random_int_model <- lmer(Y ~ X + (1 | group), data=df)
+
+*Random intercept, random slope model* 
+--> Now we also let the slope vary by group. This means each group basically has it's own model. It is 
+
+  random_intslope_model <- lmer(Y ~ X + (X | group), data=df)
+
+For each, Y=target, X = independent vars (can be many)
+
+#### Standard LMM Modelling Strategy
+(sourced from slides here: https://favstats.github.io/intro_multilevel/slides/#54)
+^ This is a useful resource, it goes through an ESS modelling doc 
+
+Approach to multilevel model building based on Hox (2010)
+
+1/  Null Model (Random Intercept only)
+2/ Add independent Level 1 variables
+3/ Add independent Level 2 variables
+4/ Add random slopes
+5/ (Cross-level) interactions
+
+Each step, check whether your model is significantly improved compared to the previous one.
+
+### Basic LMM testing with toy data 
+
+First, null model:
+```{r}
+m_null <- glmer(target_var ~ (1|isocntry),
+               data = complete_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+summary(m_null)
+```
+
+To come back and reinterpret... don't really know at this stage.
+
+Test flexplot and broom.mixed usage: 
+
+```{r}
+#devtools::install_github("dustinfife/flexplot")
+library(flexplot)
+```
+
+Here it has some examples of code and output for saved logistic model fits
+
+```{r}
+# don't think flexplot will be super useful as we have so many categorical variables
+flexplot::logistic_fit
+flexplot::mixed_logistic
+flexplot::visualize(m_null)
+
+# broom.mixed is used to tidy up the stats outputs into a tibble
+broom.mixed::tidy(m_null) # summary output in tibble
+broom.mixed::glance(m_null) # model performance summary
+
+```
+
+Random effects model 
+
+- Including individual level variables only with country: 
+
+```{r}
+n_randeffect <- glmer(target_var ~ 
+                        gender + age + I(age^2) + lifesat + religion + class + 
+                        (1|isocntry),
+               data = complete_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+```
+This suggests the data needs to be rescaled, to check which variables are the issue:
+```{r}
+library(caret)
+# check for nearzero variance, if so those could be removed
+nearZeroVar(complete_df, saveMetrics = TRUE)
+# see no issues. So all variables stay.
+
+# will recode the numeric variables I selected, which is only age
+scaled_df <- complete_df |> 
+  mutate(across(where(is.numeric), scale))
+
+```
+
+Re check the random effects model with scaled data:
+
+```{r}
+# n_randeffect <- glmer(target_var ~ 
+#                         gender + age + I(age^2) + lifesat + religion + class + 
+#                         (1|isocntry),
+#                data = scaled_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+
+## this took a long time to try run so removed variables. The nAGQ also adds time but fine for now
+
+n_randeffect <- glmer(target_var ~ 
+                        gender + age + I(age^2) + lifesat + (1|isocntry),
+               data = scaled_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+
+
+
+summary(n_randeffect)
+```
+
+Can we interpret this...
+
+```{r}
+
+```
+
+
+
+
+*Example Random effects models:* 
+m <- glmer(remission ~ IL6 + CRP + CancerStage + LengthofStay + Experience +
+    (1 | DID), data = hdp, 
+    family = binomial, control = glmerControl(optimizer = "bobyqa"),
+    nAGQ = 10)
+
+*Example from last year code*
+glm_model_4 <- glmer(binary_qc19 ~ male + d11 + I(d11^2) + political_ideology +
+               Religion_cat + sd1_7_factor + d60_ordinal + qc15_1_ordinal +
+               prop_gndr_bin + prop_dis_wide + Unemployment + (1 | country_name),
+               data = Data, family = binomial, 
+               control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000)))
+
+
+
+_Potentially useful package for visualising and interpreting linear mixed models:_ 
+Flexplot -> https://github.com/dustinfife/flexplot
+Functions to quickly visualise LMM models and compare their performance.
+
+broom.mixed
+The function broom.mixed::tidy() gives us all model parameters (random and fixed).
+
+
+
+_Useful calculations:_
+  - ICC (intra cluster correlation. How alike each of the observations within each group are)
+  - ANOVA for model comparison: anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
+
+
+
+
+--------------------------------------------------------------------
+
+think the section below is probably redundant now but just leaving until I check properly. 
+
+--------------------------------------------------------------------
 
 ## Remove unwanted variables
 
@@ -684,7 +1015,7 @@ the `polintr` variable.
 ```{r}
 id_vars <- c("studyno1", "studyno2", "doi", "version", "edition", "survey", "caseid", "uniqid", "serialid", "tnscntry", "country")
 # remove ID vars
-clean1 <- data_raw |> 
+clean1 <- data |> 
   select(-any_of(id_vars))
 
 #remove nationality variable (q1). Later, if we decide we need an immigration variable, we can impute national level data.  
