@@ -77,7 +77,8 @@ We now have 28 observations including the UK.
 
 ### Rural population
 
-Retrieved from the World Bank (<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>).
+Retrieved from the World Bank
+(<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>).
 
 Data on the % of population living in rural areas over total population.
 
@@ -99,7 +100,8 @@ str(rural_data)
 
 ### Same sex unions
 
-Retrieved from Wikipedia (<https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe>).
+Retrieved from Wikipedia
+(<https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe>).
 
 Table about status of same sex unions by country in Europe.
 
@@ -127,8 +129,6 @@ marriage_data <- marriage_data |>
 str(marriage_data)
 ```
 
-
-
 This variable could be recoded as either ordinal, categorical (both factor) or logical.
 
 The dataset has 32 observations instead of 28 (EU-28 countries).
@@ -139,9 +139,14 @@ marriage_data |>
   filter(n > 1)
 ```
 
-According to this test, Croatia, Hungary, Latvia and Slovakia have two different types of status, so maybe we should cross-check with other sources?
+According to this test, Croatia, Hungary, Latvia and Slovakia have two
+different types of status, so maybe we should cross-check with other
+sources?
 
-Diego: the thing is that countries can at the same time have a constitutional ban on marriage and still have legally recognized civil unions. Thus maybe we should exclude this level from this variable as it is not exclusive. The lowest level would remain no recognition.
+Diego: the thing is that countries can at the same time have a
+constitutional ban on marriage and still have legally recognized civil
+unions. Thus maybe we should exclude this level from this variable as it
+is not exclusive. The lowest level would remain no recognition.
 
 +Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
 
@@ -158,7 +163,6 @@ United Kingdom: marriage since 2014 in England, Scotland and Wales, and since 20
 ---------------------------------civil unions-----------------------------------
 Latvia: civil unions since 2024, the Constitution prohibits the recognition of same sex marriage since 2006.
 
-
 ```{r}
 marriage_data <- marriage_data |> 
   mutate(Status = case_when(
@@ -174,7 +178,9 @@ marriage_data <- marriage_data |>
 marriage_data |> filter(Country %in% c("Latvia", "Greece", "Estonia", "Slovenia", "United Kingdom"))
 ```
 
+
 I also found this LGBT rights index on Our World in Data (<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures whether LGBT+ people enjoy the same rights as cisgender people combining information on 18 different policies. It includes the legal status of same-sex marriage so we might keep only one of these.
+
 ```{r}
 lgbt_rights_index <- read.csv("lgbt-rights-index.csv")
 
@@ -204,6 +210,7 @@ gender_index |>
 
 str(gender_index)
 ```
+
 This dataset now has 560 rows for the EU-28 countries, it has many indicators apart from the indexes values, which we will have to decide if we keep or not.
 
 
@@ -241,9 +248,12 @@ we think they're useful or if we can discard some/all of them.
 
 ## Selecting relevant variables in the survey data
 
-We are discarding all variables that relate to trade and globalization as deemed not relevant for our analysis `qa`. We are also discarding variales related to energy policies `qb`.
+We are discarding all variables that relate to trade and globalization
+as deemed not relevant for our analysis `qa`. We are also discarding
+variales related to energy policies `qb`.
 
-We have also not considered questions specifically about Roma ex `qc8` and `qc14` and `qc16`
+We have also not considered questions specifically about Roma ex `qc8`
+and `qc14` and `qc16`
 
 <br>
 
@@ -255,7 +265,11 @@ AGE
 x_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
 ggplot(x_df, aes(x = d11, y = mean)) + geom_point()
 ```
-As relationship seems pretty linear we are going to use the continuous variable for age and there seems to be a clear group (1to4) which is the same used in the variable with 3 categories left, center and right so we will use the 3-categories variable
+
+As relationship seems pretty linear we are going to use the continuous
+variable for age and there seems to be a clear group (1to4) which is the
+same used in the variable with 3 categories left, center and right so we
+will use the 3-categories variable
 
 <br>
 
@@ -266,7 +280,8 @@ x_df <- data_raw |> summarise(mean = mean(qc19), .by = d1)
 ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + xlim(1,10)
 ```
 
-For political opinions it seems that the relationship is less linear so we will work on the 5 categories cod
+For political opinions it seems that the relationship is less linear so
+we will work on the 5 categories cod
 
 <br>
 
@@ -277,73 +292,122 @@ x_df <- data_raw |> summarise(mean = mean(qc19), .by = d7r1)
 ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5)
 ```
 
-Of all the possible combinations this one seems the best to highlight differences in our target variable
+Of all the possible combinations this one seems the best to highlight
+differences in our target variable
 
 <br>
 
 NATIONALITY
 
-There is no easy way to create an immigrant dummy by checking whether someone does not have the nationality of the country in which he is being interviewed for the survey. So we are just going to use `q1_29` as a dummy for whether someone owns a non-EU nationality
+There is no easy way to create an immigrant dummy by checking whether
+someone does not have the nationality of the country in which he is
+being interviewed for the survey. So we are just going to use `q1_29` as
+a dummy for whether someone owns a non-EU nationality
 
 <br>
 
 POLITICAL INTEREST
 
-Using only `polintr` as a summary of the whole `d71` question about how strong is your interest in politics in various domains
+Using only `polintr` as a summary of the whole `d71` question about how
+strong is your interest in politics in various domains
 
 <br>
 
 EXPERIENCED DISCRIMINATION
 
-For the questions about whether you have experienced discrimination `qc2_` I am keeping only `qc2_15` which is a binary on whether you have experienced any discrimination or not and I am not keeping the other categories that allowed us to understand if you had experienced discrimination on the basis of a particular motive. We can probably assume that if a person is a part of a specific minority (info from `sd2`) and is being discriminated is because of being part of that minority (at least in most cases), therefore it felt like information we already had (and which we can easily put in our regression using interaction effects)
+For the questions about whether you have experienced discrimination
+`qc2_` I am keeping only `qc2_15` which is a binary on whether you have
+experienced any discrimination or not and I am not keeping the other
+categories that allowed us to understand if you had experienced
+discrimination on the basis of a particular motive. We can probably
+assume that if a person is a part of a specific minority (info from
+`sd2`) and is being discriminated is because of being part of that
+minority (at least in most cases), therefore it felt like information we
+already had (and which we can easily put in our regression using
+interaction effects)
 
 <br>
 
 PERCIEVED DISCRIMINATION in country
 
-This is a question (`qc1`) about how widespread you perceived discrimination is in your country. It is a rather peculiar question because it asks indiviudals for perception at the country level. I think it might be more useful (by aggregating results by country) to use it to build a country level indicator of perceived discrimination against certain minorities that are of our interest rather than use it as an individual level variable. So I will keep them out of the dataset for now
+This is a question (`qc1`) about how widespread you perceived
+discrimination is in your country. It is a rather peculiar question
+because it asks indiviudals for perception at the country level. I think
+it might be more useful (by aggregating results by country) to use it to
+build a country level indicator of perceived discrimination against
+certain minorities that are of our interest rather than use it as an
+individual level variable. So I will keep them out of the dataset for
+now
 
-For the same reason I am also discarding `qc4` that asks whether in your country you feel like candidates with certain characteristics would be at a disadvantage in the recruitment process. It still basically asks about perceived discrimination at the country level.
+For the same reason I am also discarding `qc4` that asks whether in your
+country you feel like candidates with certain characteristics would be
+at a disadvantage in the recruitment process. It still basically asks
+about perceived discrimination at the country level.
 
-And the same reasoning also applies to `qc7` which asks if efforts towards reducing discrimination are effective in your country.
+And the same reasoning also applies to `qc7` which asks if efforts
+towards reducing discrimination are effective in your country.
 
 <br>
 
 HOW DISCRIMINATORY ARE YOU score
 
-I use `qc12` and `qc13` to build a score from 1 to 10 of how discriminatory are you against certain minorities. I am building the score for each minority and then we can decide later if some are irrelevant.
+I use `qc12` and `qc13` to build a score from 1 to 10 of how
+discriminatory are you against certain minorities. I am building the
+score for each minority and then we can decide later if some are
+irrelevant.
 
-Note for some categories this score is a bit stupid (ex. voting for whether you would feel uncomfortable if your child was in a love relationship with a old person would give you a high racist score against old people, this is an example of some of the categories for which it is worth excluding the index)
+Note for some categories this score is a bit stupid (ex. voting for
+whether you would feel uncomfortable if your child was in a love
+relationship with a old person would give you a high racist score
+against old people, this is an example of some of the categories for
+which it is worth excluding the index)
 
-We can also further aggregate to obtain just one score (or obtain religious/ethnic score etc.). 
+We can also further aggregate to obtain just one score (or obtain
+religious/ethnic score etc.).
 
-Option also to discard them all (anti lgbtqi sentiment is also captured in the next index built from `qc15`)
+Option also to discard them all (anti lgbtqi sentiment is also captured
+in the next index built from `qc15`)
 
-`qc6` also asks about discriminatory behaviors, but is about elected public official, it does not ask about a situation that impacts you personally. It also uses different categories for minorities therefore I prefer to use `qc12` and `qc13` rather than `qc6`
+`qc6` also asks about discriminatory behaviors, but is about elected
+public official, it does not ask about a situation that impacts you
+personally. It also uses different categories for minorities therefore I
+prefer to use `qc12` and `qc13` rather than `qc6`
 
 <br>
 
 SUPPORTIVE OF LGBTQ RIGHTS INDEX
 
-Using `qc15` we can again build an index for how supportive of lgbtq rights a person is. 
+Using `qc15` we can again build an index for how supportive of lgbtq
+rights a person is.
 
-I again choose to take the mean across the different answers but we could also use median/mode if we think is better
+I again choose to take the mean across the different answers but we
+could also use median/mode if we think is better
 
-If we feel each or some answers are particularly useful (given they are closely related with our target variable) we can also use them separately 
+If we feel each or some answers are particularly useful (given they are
+closely related with our target variable) we can also use them
+separately
 
-We could also use `qc18` to try to capture anti lgbtq sentiment, but I preferred `qc15` as it seemed more straightforward (I therfore deleted `qc18`, but we can put it back if useful)
+We could also use `qc18` to try to capture anti lgbtq sentiment, but I
+preferred `qc15` as it seemed more straightforward (I therfore deleted
+`qc18`, but we can put it back if useful)
 
 <br>
 
 MY VOICE COUNTS
 
-I guess that people that feel alienated from society and politics might be less likely to support lgbtq rights so I took the mean of `d72` question which asked whether you felt like your voice mattered
+I guess that people that feel alienated from society and politics might
+be less likely to support lgbtq rights so I took the mean of `d72`
+question which asked whether you felt like your voice mattered
+
+<br>
 
 OTHERS
 
-`qc11` is a strange question feels useless to me, I removed it for now but we can think about it
+`qc11` is a strange question feels useless to me, I removed it for now
+but we can think about it
 
-I also removed `qc9` as I don't really know what to do with it and `qc17`
+I also removed `qc9` as I don't really know what to do with it and
+`qc17`
 
 ```{r}
 data <- data_raw |> 
@@ -390,15 +454,17 @@ paradata <- data_raw |>
 
 Removing some of the previously selected variables
 
-`sd2_7` to `sd2_10`: these are possible answer deemed irrelevant to the question about yourself being part of the following minorities:
-`sd2_7` other minorities (I don't know what other relevant minorities could be there), 
-`sd2_8` not part of minorities (can be deducted from the rest), 
-`sd2_9` refusal to respond, 
-`sd2_10` DK answers
-`sd2t` summary binary variable for being part of any minority (we are going to keep the more specific one)
+`sd2_7` to `sd2_10`: these are possible answer deemed irrelevant to the
+question about yourself being part of the following minorities: `sd2_7`
+other minorities (I don't know what other relevant minorities could be
+there), `sd2_8` not part of minorities (can be deducted from the rest),
+`sd2_9` refusal to respond, `sd2_10` DK answers `sd2t` summary binary
+variable for being part of any minority (we are going to keep the more
+specific one)
 
-I also remove `qc12_nr` as I prefer to work on the full variable instead of the recoded version with less categories. Same for `qc13` and `qc18`
-  
+I also remove `qc12_nr` as I prefer to work on the full variable instead
+of the recoded version with less categories. Same for `qc13` and `qc18`
+
 ```{r}
 data <- data |> 
   # Keep in mind that sd2t does not have NAs so we might want to use that instead of the more specific ones
@@ -407,7 +473,6 @@ data <- data |>
   select(-(starts_with("qc13") & ends_with("r"))) |> 
   select(-(starts_with("qc18") & ends_with("r")))
 ```
-
 
 ## Check overall data quality
 
@@ -430,11 +495,16 @@ plot_missing(data)
 names(which(colSums(is.na(data)) > 0))
 ```
 
-Exploiting the fact that the .dta files has attributes (labels) for all its columns.
+Exploiting the fact that the .dta files has attributes (labels) for all
+its columns.
 
-If we search for `attr(colname, "label")` you get back the original long name of the variable 
+If we search for `attr(colname, "label")` you get back the original long
+name of the variable
 
-If we instead search for `attr(colname, "labels")` you get back all the possible encoding levels of the variable (ex.1,2,3,4 etc.) and by doing `names(attr(colname, "labels"))` you get back the actual meaning of those numbers (ex. 1 = "Yes", 2 = "No", etc.)
+If we instead search for `attr(colname, "labels")` you get back all the
+possible encoding levels of the variable (ex.1,2,3,4 etc.) and by doing
+`names(attr(colname, "labels"))` you get back the actual meaning of
+those numbers (ex. 1 = "Yes", 2 = "No", etc.)
 
 ```{r}
 # Extracting all the full names of the columns
@@ -444,9 +514,13 @@ variable_names <- tibble(
 variable_names
 ```
 
-These long names df might be useful to rename the variables systematically all together. Remember in case we filter out variables after this code chunk and in case we use this df to rename variables that there might be disalignments. 
+These long names df might be useful to rename the variables
+systematically all together. Remember in case we filter out variables
+after this code chunk and in case we use this df to rename variables
+that there might be disalignments.
 
-Will now look into the labels for the different levels that our factor variables can take:
+Will now look into the labels for the different levels that our factor
+variables can take:
 
 ```{r}
 attr(data$d11r1, "labels")
@@ -473,7 +547,8 @@ list_label_tibbles <- setNames(list_label_tibbles, names(data))
 list_label_tibbles$d11r1
 ```
 
-Right column is what it appears in our data (as a number). Left column is the label that we must assign to that number when we factorize
+Right column is what it appears in our data (as a number). Left column
+is the label that we must assign to that number when we factorize
 
 ## Start cleaning
 
@@ -487,7 +562,8 @@ data <- data |>
 # We might want to join the full name of the countries using the codelist df
 ```
 
-Separating variables for which I can use the attribute labels to factorize them and the variables for which this strategy cannot be used
+Separating variables for which I can use the attribute labels to
+factorize them and the variables for which this strategy cannot be used
 
 ```{r}
 data <- data |> 
@@ -601,24 +677,211 @@ data <- data |>
 
 <br><br>
 
+<<<<<<< Updated upstream
 SITUATION SO FAR
 
-Need to recode correctly all NAs
+<<<<<<< Updated upstream
+This should be our final selection of variables.
 
-Rename columns appropriately
+We still need to rename them appropriately and check that all the NAs are correctly encoded by looking at the summary. Below I left some comments about the things to do to finish the cleaning.
+
+After that we can further discard some due to missingness, multicollinearity, irrelevance.
+
+We need also to build the country level dataframe. Join all the country level data together.
+
+Then next steps would involve imputing NAs, building the country level dataframe and then we can start with correlation, discarding variables and modelling
 
 ```{r}
+# TO-DO-LIST
+
+# friends_trans REFUSAL level - leave it like that or NAs?
+
+# sd3 look more into that for NAs or aggregations as not all levels are printed with summary
+
+# qc2_15 we need to adjust the labels: not mentioned=have been discriminated against; No, you haven’t been discriminated against or experienced harassment=no discrimination experienced
+
+# qc10 look more into that for NAs or aggregations as not all levels are printed with summary
+
+#d1r1 correctly encode NAs
+
+#d7r1 correctly encode NAs
+
+#d15a_r2 look more into that for NAs as not all levels are printed with summary
+
+#d60 REFUSAL must be turned into NAs?
+
+#d63 look more into that for NAs as not all levels are printed with summary
+
+# and more? I think this is it
+```
+=======
+Need to recode correctly all NAs
+=======
+Recoding correclty all NAs
+
+Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
+
+```{r}
+
+factor_variables <- names(data)[sapply(data, is.factor)]
+print(setdiff(factor_variables, "qc19"))
+
+data <- data %>%
+  mutate(across(
+    all_of(setdiff(factor_variables, "friends_trans")),  # Exclude "friends_trans"
+    ~ {
+      refusal_levels <- grep("REFUSAL", levels(.), value = TRUE, ignore.case = TRUE)  # Look for levels that contain "REFUSAL"
+      if (length(refusal_levels) > 0) {  # If there are levels containing "REFUSAL"
+        fct_recode(., NULL = refusal_levels)  # Convert in NA
+      } else {
+        .  # if not remain without changes
+      }
+    }
+  ))
+
+```
+>>>>>>> Stashed changes
+>>>>>>> Stashed changes
+
+
+```{r}
+<<<<<<< Updated upstream
 summary(data)
+plot_missing(data)
+```
+Recoding correclty all NAs
+
+Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. 
+
+```{r}
+
+
+data <- data %>%
+  mutate(across(
+    all_of(setdiff(factor_variables, "qc19")),  # Excluir "qc19"
+    ~ {
+      refusal_levels <- grep("REFUSAL", levels(.), value = TRUE, ignore.case = TRUE)  # Buscar niveles que contengan "REFUSAL"
+      if (length(refusal_levels) > 0) {  # Si hay niveles que contienen "REFUSAL"
+        fct_recode(., NULL = refusal_levels)  # Convertirlos en NA
+      } else {
+        .  # Si no hay niveles, devolver la columna sin cambios
+      }
+    }
+  ))
+
+
+
+data <- data %>%
+  mutate(
+    religion = ifelse(religion == 15, NA, religion),  
+    left_right = ifelse(left_right == 4, NA, left_right),  
+    marital_status = ifelse(marital_status == 7, NA, marital_status),  
+    bill_issues = ifelse(bill_issues == 4, NA, bill_issues),  
+    social_class = ifelse(social_class == 8, NA, social_class)  
+  )
+table(data$social_class)
+
+```
+
+Adding a dummy variable for gender (i am keeping the original one in case is useful)
+
+```{r}
+str(data)
+
+data$men <- ifelse(data$gender == 1, 1, 0)
+
+# Verificar el resultado
+head(data)  # Muestra las primeras filas del dataset para comprobar
 ```
 
 
 
- <br><br><br><br> 
+```{r}
+
+# Función para extraer códigos y valores de variables categóricas
+extract_factor_levels <- function(df) {
+  tibble(
+    variable = names(df),  # Nombre de la variable
+    codes = sapply(df, function(col) {
+      if (is.factor(col)) paste(seq_along(levels(col)), collapse = ", ") else NA
+    }),  # Códigos numéricos (posiciones de los niveles)
+    values = sapply(df, function(col) {
+      if (is.factor(col)) paste(levels(col), collapse = ", ") else NA
+    })  # Valores de los factores
+  )
+}
+
+# Crear tabla con códigos y valores
+variable_levels <- extract_factor_levels(data)
+
+# Mostrar la tabla
+variable_levels
+
+```
 
 
-We should be checking whether there are other levels for different variables that need special treatments (such as refuse to respond, should we turn those into NAs?). We can do this by looking at the summary below
+First of all, we transform the variable disc_no, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward.
 
-First let's change the name and try to clean them to get to significant names
+```{r}
+str(data)
+data <- data |> 
+  mutate(suffered_discr = ifelse(disc_no == 1, 1, 
+                                 ifelse(disc_no == 2, 0, NA))) |> 
+  select(-disc_no) 
+
+```
+
+
+Rename columns appropriately
+
+```{r}
+
+data <- data |> 
+  rename(
+    country = isocntry,
+    life_sat = d70,
+    ethnic_minority = sd2_1,
+    skincolor_minority = sd2_2,
+    religious_minority = sd2_3,
+    roma_minority = sd2_4,
+    sexual_minority = sd2_5,
+    disability_minority = sd2_6,
+    religion = sd3,
+    disc_no = qc2_15,
+    disc_where = qc3,
+    disc_contact = qc10,
+    trans_docs = qc19,
+    gender_docs = qc20,
+    left_right = d1r1,
+    marital_status = d7r1,
+    gender = d10,
+    occupation = d15a_r2,
+    community = d25,
+    phone_access = d43t,
+    bill_issues = d60,
+    internet_use = netuse,
+    social_class = d63
+  )
+
+```
+
+
+
+```{r}
+
+str(data)
+summary(data)
+```
+
+<br><br><br><br>
+
+We should be checking whether there are other levels for different
+variables that need special treatments (such as refuse to respond,
+should we turn those into NAs?). We can do this by looking at the
+summary below
+
+First let's change the name and try to clean them to get to significant
+names
 
 ```{r}
 # colnames(data) <- variable_names$var_full_name
@@ -627,8 +890,6 @@ First let's change the name and try to clean them to get to significant names
 #   clean_names()
 ```
 
-
-
 So this is our situation so far:
 
 ```{r}
@@ -636,7 +897,56 @@ head(data)
 summary(data)
 plot_missing(data)
 ```
+=======
+data <- data |> 
+  rename(
+    country = isocntry,
+    life_sat = d70,
+    ethnic_minority = sd2_1,
+    skincolor_minority = sd2_2,
+    religious_minority = sd2_3,
+    roma_minority = sd2_4,
+    sexual_minority = sd2_5,
+    disability_minority = sd2_6,
+    religion = sd3,
+    disc_no = qc2_15,
+    disc_where = qc3,
+    disc_contact = qc10,
+    trans_docs = qc19,
+    gender_docs = qc20,
+    left_right = d1r1,
+    marital_status = d7r1,
+    gender = d10,
+    occupation = d15a_r2,
+    community = d25,
+    phone_access = d43t,
+    bill_issues = d60,
+    internet_use = netuse,
+    social_class = d63
+  )
 
+```
+
+
+Adding a dummy variable for gender (i am keeping the original one in case is useful)
+
+```{r}
+data$man <- ifelse(data$gender == "Man", 1, 0)
+
+```
+
+
+Now, we will transform the variable disc_no, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward.
+
+```{r}
+
+data <- data |> 
+  mutate(suffered_discr = ifelse(disc_no == "Not mentioned", 1, 0)) |> 
+  select(-disc_no) 
+
+```
+
+>>>>>>> Stashed changes
 
 # Identify key socio-demogrpahic variables
 
