@@ -41,20 +41,39 @@ data_raw <- read_dta("ZA7575.dta")
 
 ## Country-level data
 
-### GDP per capita
+This is for joins:
+```{r}
+# builidng a df with country names and codes for the EU-28
+codelist <- countrycode::codelist |> 
+  select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
+  filter(!is.na(eu28)) 
+```
 
-Retrieved from Eurostat (<https://ec.europa.eu/eurostat/databrowser/view/tipsna40/default/table?lang=en>) for the year 2019.
+### GDP per capita, PPP (constant 2021 international $)
+
+Retrieved from the World Bank (<https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD>) for the year 2019.
 
 ```{r}
-gdp_data <- read_xlsx("gdp_pc_2019.xlsx", sheet = 3, range = "A11:B39", col_names = c("country", "gdp_pc"))
+gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4)
+
+head(gdp_data)
+
+gdp_data <- gdp_data |> 
+  select(`Country Name`, `Country Code`, `2019`)
+
+
+gdp_data <- gdp_data |> 
+  rename(country_name = `Country Name`,
+         country_code = `Country Code`,
+         gdp_pc_ppp = `2019`)
+
+gdp_data <- gdp_data |> 
+inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+
 str(gdp_data)
 ```
 
-1)  United Kingdom is missing from this dataset as well as from a few others in Eurostat (we might have to find it somewhere else).
-
-2)  Data needs further cleaning
-
-3)  Reflect whether we might be better suited with other measures of GDP (GDP at PPP)
+We now have 28 observations including the UK.
 
 ### Rural population
 
@@ -64,6 +83,7 @@ Data on the % of population living in rural areas over total population.
 
 ```{r}
 rural_data <- read_xls("rural_pop.xls", sheet = 1, range = "A4:BL270")
+head(rural_data)
 
 # selecting only the relevant year
 rural_data <- rural_data |> 
@@ -71,13 +91,9 @@ rural_data <- rural_data |>
   clean_names() |> 
   rename("rural_pop_percentage" = "x2019")
 
-# builidng a df with country names and codes for the EU-28
-codelist <- countrycode::codelist |> 
-  select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
-  filter(!is.na(eu28)) 
-
 rural_data <- rural_data |> 
   inner_join(select(codelist, iso3c), by = c("country_code" = "iso3c"))
+
 str(rural_data)
 ```
 
@@ -107,8 +123,11 @@ marriage_data <- marriage_data |>
 # keeping only eu-28 countries 
 marriage_data <- marriage_data |> 
   inner_join(select(codelist, cow.name), by = c("Country" = "cow.name"))
+
 str(marriage_data)
 ```
+
+
 
 This variable could be recoded as either ordinal, categorical (both factor) or logical.
 
@@ -124,23 +143,69 @@ According to this test, Croatia, Hungary, Latvia and Slovakia have two different
 
 Diego: the thing is that countries can at the same time have a constitutional ban on marriage and still have legally recognized civil unions. Thus maybe we should exclude this level from this variable as it is not exclusive. The lowest level would remain no recognition.
 
-### Gender Equality Index
++Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
 
-Developed by the European Institute for Gender Equality. Retrieved from <https://eige.europa.eu/gender-statistics/dgs/indicator/index__index_scores/datatable> for the year 2019.
+
+
+//////////
+
+The table is up to date, so I had to check (on Wikipedia honestly) what year each of those items was actually legalized and I got to this:
+-----------------------------same sex marriage-----------------------------
+Greece: civil unions since 2015, marriage since 2024
+Estonia: civil unions since 2016, marriage since 2024
+Slovenia: civil unions since 2017, marriage since 2022
+United Kingdom: marriage since 2014 in England, Scotland and Wales, and since 2020 in Northern Ireland. Civil unions since 2005
+---------------------------------civil unions-----------------------------------
+Latvia: civil unions since 2024, the Constitution prohibits the recognition of same sex marriage since 2006.
+
 
 ```{r}
-# cleaning the data
-gequality_index <- read_xlsx("gender_equality_index_scores.xlsx", range = "A16:V44")
-names(gequality_index) <- names(gequality_index) %>%
-  janitor::make_clean_names() %>%
-  gsub("_score$", "", .)
+marriage_data <- marriage_data |> 
+  mutate(Status = case_when(
+    Country == "Greece" ~ "Civil Unions",
+    Country == "Estonia" ~ "Civil Unions",
+    Country == "Slovenia" ~ "Civil Unions",
+    Country == "United Kingdom" ~ "Civil Unions" ,  # I understand that same-sex marriage wasn't legal in the UK until it was legalised in all of its territories, but this can be discussed
+    Country == "Latvia" & Status == "Civil unions" ~ "No recognition", # only mutate one of the rows that Latvia is in
+    # Latvia had no recognition prior to 2024, but it has a constitutional ban on marriage, which is a category that we found alongside others in some observations, so we'll keep two rows for Latvia for now
+    TRUE ~ Status
+  ))
 
-gequality_index <- gequality_index |>  
-  rename(country_name = geographic_region_sub_domain_scores)
-str(gequality_index)
+marriage_data |> filter(Country %in% c("Latvia", "Greece", "Estonia", "Slovenia", "United Kingdom"))
 ```
 
-No UK in this datset (28 rows because it is present a row about EU as a whole)
+I also found this LGBT rights index on Our World in Data (<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures whether LGBT+ people enjoy the same rights as cisgender people combining information on 18 different policies. It includes the legal status of same-sex marriage so we might keep only one of these.
+```{r}
+lgbt_rights_index <- read.csv("lgbt-rights-index.csv")
+
+lgbt_rights_index <- lgbt_rights_index |> 
+  filter(Year == 2019) |> 
+  inner_join(select(codelist, iso3c), by = c("Code" = "iso3c")) |> 
+  select(-Year) # all observations are from 2019
+
+str(lgbt_rights_index)
+```
+
+
+### Gender related tables
+
+Gender Development and Gender Inequality indexes, developed by the United Nations Development. Retrieved from <https://hdr.undp.org/data-center/documentation-and-downloads> for the year 2019.
+
+```{r}
+gender_index <- read_xlsx("UNDP_gender_indexes.xlsx")
+
+gender_index <- gender_index |>
+  select(-dimension, -note, -year) |> # empty/useless columns
+  inner_join(select(codelist, iso3c), by = c("countryIsoCode" = "iso3c"))
+
+gender_index |> 
+  distinct(country) |> 
+  nrow()
+
+str(gender_index)
+```
+This dataset now has 560 rows for the EU-28 countries, it has many indicators apart from the indexes values, which we will have to decide if we keep or not.
+
 
 ### Economist's Democracy Index
 
