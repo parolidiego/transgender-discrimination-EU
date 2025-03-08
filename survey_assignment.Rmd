@@ -714,9 +714,8 @@ Then next steps would involve imputing NAs, building the country level dataframe
 
 # and more? I think this is it
 ```
-=======
-Need to recode correctly all NAs
-=======
+
+
 Recoding correclty all NAs
 
 Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
@@ -724,7 +723,6 @@ Now we will substitute de "Refusal" answers in the remaining variables as NAs. I
 ```{r}
 
 factor_variables <- names(data)[sapply(data, is.factor)]
-print(setdiff(factor_variables, "qc19"))
 
 data <- data %>%
   mutate(across(
@@ -738,96 +736,6 @@ data <- data %>%
       }
     }
   ))
-
-```
->>>>>>> Stashed changes
->>>>>>> Stashed changes
-
-
-```{r}
-<<<<<<< Updated upstream
-summary(data)
-plot_missing(data)
-```
-Recoding correclty all NAs
-
-Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. 
-
-```{r}
-
-
-data <- data %>%
-  mutate(across(
-    all_of(setdiff(factor_variables, "qc19")),  # Excluir "qc19"
-    ~ {
-      refusal_levels <- grep("REFUSAL", levels(.), value = TRUE, ignore.case = TRUE)  # Buscar niveles que contengan "REFUSAL"
-      if (length(refusal_levels) > 0) {  # Si hay niveles que contienen "REFUSAL"
-        fct_recode(., NULL = refusal_levels)  # Convertirlos en NA
-      } else {
-        .  # Si no hay niveles, devolver la columna sin cambios
-      }
-    }
-  ))
-
-
-
-data <- data %>%
-  mutate(
-    religion = ifelse(religion == 15, NA, religion),  
-    left_right = ifelse(left_right == 4, NA, left_right),  
-    marital_status = ifelse(marital_status == 7, NA, marital_status),  
-    bill_issues = ifelse(bill_issues == 4, NA, bill_issues),  
-    social_class = ifelse(social_class == 8, NA, social_class)  
-  )
-table(data$social_class)
-
-```
-
-Adding a dummy variable for gender (i am keeping the original one in case is useful)
-
-```{r}
-str(data)
-
-data$men <- ifelse(data$gender == 1, 1, 0)
-
-# Verificar el resultado
-head(data)  # Muestra las primeras filas del dataset para comprobar
-```
-
-
-
-```{r}
-
-# Función para extraer códigos y valores de variables categóricas
-extract_factor_levels <- function(df) {
-  tibble(
-    variable = names(df),  # Nombre de la variable
-    codes = sapply(df, function(col) {
-      if (is.factor(col)) paste(seq_along(levels(col)), collapse = ", ") else NA
-    }),  # Códigos numéricos (posiciones de los niveles)
-    values = sapply(df, function(col) {
-      if (is.factor(col)) paste(levels(col), collapse = ", ") else NA
-    })  # Valores de los factores
-  )
-}
-
-# Crear tabla con códigos y valores
-variable_levels <- extract_factor_levels(data)
-
-# Mostrar la tabla
-variable_levels
-
-```
-
-
-First of all, we transform the variable disc_no, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward.
-
-```{r}
-str(data)
-data <- data |> 
-  mutate(suffered_discr = ifelse(disc_no == 1, 1, 
-                                 ifelse(disc_no == 2, 0, NA))) |> 
-  select(-disc_no) 
 
 ```
 
@@ -866,69 +774,7 @@ data <- data |>
 ```
 
 
-
-```{r}
-
-str(data)
-summary(data)
-```
-
-<br><br><br><br>
-
-We should be checking whether there are other levels for different
-variables that need special treatments (such as refuse to respond,
-should we turn those into NAs?). We can do this by looking at the
-summary below
-
-First let's change the name and try to clean them to get to significant
-names
-
-```{r}
-# colnames(data) <- variable_names$var_full_name
-# 
-# data <- data |> 
-#   clean_names()
-```
-
-So this is our situation so far:
-
-```{r}
-head(data)
-summary(data)
-plot_missing(data)
-```
-=======
-data <- data |> 
-  rename(
-    country = isocntry,
-    life_sat = d70,
-    ethnic_minority = sd2_1,
-    skincolor_minority = sd2_2,
-    religious_minority = sd2_3,
-    roma_minority = sd2_4,
-    sexual_minority = sd2_5,
-    disability_minority = sd2_6,
-    religion = sd3,
-    disc_no = qc2_15,
-    disc_where = qc3,
-    disc_contact = qc10,
-    trans_docs = qc19,
-    gender_docs = qc20,
-    left_right = d1r1,
-    marital_status = d7r1,
-    gender = d10,
-    occupation = d15a_r2,
-    community = d25,
-    phone_access = d43t,
-    bill_issues = d60,
-    internet_use = netuse,
-    social_class = d63
-  )
-
-```
-
-
-Adding a dummy variable for gender (i am keeping the original one in case is useful)
+Adding a dummy variable for gender (I am keeping the original one in case is useful)
 
 ```{r}
 data$man <- ifelse(data$gender == "Man", 1, 0)
@@ -946,7 +792,6 @@ data <- data |>
 
 ```
 
->>>>>>> Stashed changes
 
 # Identify key socio-demogrpahic variables
 
