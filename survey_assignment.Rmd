@@ -29,6 +29,12 @@ library(explore)
 library(lme4)
 library(lmerTest)
 library(broom.mixed)
+library(ggplot2)
+library(dplyr)
+library(scales)
+library(tidyr)
+library(kableExtra)
+library(gmodels)
 ```
 
 # Loading data
@@ -250,7 +256,7 @@ we think they're useful or if we can discard some/all of them.
 
 We are discarding all variables that relate to trade and globalization
 as deemed not relevant for our analysis `qa`. We are also discarding
-variales related to energy policies `qb`.
+variables related to energy policies `qb`.
 
 We have also not considered questions specifically about Roma ex `qc8`
 and `qc14` and `qc16`
@@ -332,7 +338,7 @@ PERCIEVED DISCRIMINATION in country
 
 This is a question (`qc1`) about how widespread you perceived
 discrimination is in your country. It is a rather peculiar question
-because it asks indiviudals for perception at the country level. I think
+because it asks individUals for perception at the country level. I think
 it might be more useful (by aggregating results by country) to use it to
 build a country level indicator of perceived discrimination against
 certain minorities that are of our interest rather than use it as an
@@ -791,6 +797,371 @@ data <- data |>
   select(-disc_no) 
 
 ```
+
+
+Candela: I don't know if we have stepped on each other's toes at some point. I can't run the "identify key sociodemographic" chunk because it can't find clean1 (maybe we deleted it by accident?).
+
+
+# checking missing data again, once refusals etc has also been dealed with
+```{r}
+plot_missing(data)
+```
+
+we should consider deleting disc_where
+
+I was trying to plot the distributions of the numeric variables to see which ones are highly skewed and require a transformation to normalize them. It's plotting the discrete variables too. I always have the doubt if discrete variables can de transformed, idk if its a good practice.
+
+```{r}
+
+library(e1071)
+
+# Identify numeric variables
+numeric_vars <- names(data)[sapply(data, is.numeric)]
+
+# Creating histogramas y calculating skweness
+for (var in numeric_vars) {
+  p <- ggplot(data, aes(x = .data[[var]])) +
+    geom_histogram(binwidth = 1, fill = "blue", color = "black") +
+    labs(title = paste("Histogram of", var), x = var, y = "Count") +
+    theme_minimal()
+  print(p)
+  
+  skew <- skewness(data[[var]], na.rm = TRUE)
+  cat("Skewness of", var, ":", skew, "\n")
+  
+  # Suggest transformation if skeness is high
+  if (abs(skew) > 1) {
+    cat("--> Consider applying a logarithmic transformation to", var, "\n")
+  }
+}
+
+```
+
+
+#Exploratoy Descriptive Analysis 
+
+--> it's just a first approach. I organized it it 3 blocks (sociodemographic variables, relations with minorities and paradata), but feel free to suggest even deleting most part of it. I guess Marga want us to go straightfoward and don't do unuseful things. I didn't spend a lot of time to make the graphics pretty and it's probably not the best way to visualize them. It is a first attempt that can be improved as we decide.
+
+
+## Analysis of individual-level variables
+
+We must keep in mind our Target variable is qc19 "Do you think that transgender persons should be able to change their civil documents to match their inner gender identity?"
+
+(this graph could be redundant)
+
+```{r}
+
+data_percent <- data |> 
+  group_by(trans_docs) |> 
+  summarise(count = n()) |> 
+  mutate(percentage = count / sum(count) * 100)
+
+ggplot(data_percent, aes(x = trans_docs, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity") +  
+  geom_text(aes(label = sprintf("%.1f%%", percentage)),  
+            vjust = -0.5, size = 4, color = "black") +  
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+  labs(
+    title = "Overall distribution of support for trans people to change \ntheir gender in civil documents",
+    x = "Support for Transgender Rights",
+    y = "Percentage"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+```
+
+Taking a look to our variable of interest alone, we see how the 52.7% of our sample are in favor of trans people to change their gender in their civil documents. However, there is also a significant opposition (35,3%), and a 12% who answered "Don't know". We will try to explore this distribution along the variables we consider to be most important for our analysis.
+
+--> When we turned DK into NAs for all the factor variables, we also changed it for qc19 (now trans_docs). Idk if for the EDA we want to keep that category as "na". 
+
+### Sociodemographic variables
+
+--> Do we want to interpret significant relations of each combination of variables we are plotting? 
+
+#### Gender
+
+```{r}
+
+data_summary <- data |> 
+  count(trans_docs, gender, name = "n") |> 
+  group_by(gender) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = gender)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by gender",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within Gender",
+    fill = "Gender"
+  ) +
+  theme_minimal()
+
+# Crear una tabla de contingencia
+contingency_table <- table(data$gender, data$trans_docs)
+
+# Realizar la prueba de chi-cuadrado
+chisq_test <- chisq.test(contingency_table)
+print(chisq_test)
+
+```
+Men exhibit a lower percentage of favorable or dk responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
+
+
+#### Age
+```{r}
+
+ggplot(data, aes(x = trans_docs, y = age, fill = "blue")) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(title = "Support by age",
+       y = "Age",
+       x = "Support")+
+  theme(legend.position = "none")
+
+#ANOVA
+anova <- aov(age ~ trans_docs, data = data)
+summary(anova)
+```
+
+There are significant differences between the groups defined by trans_docs.
+ 
+#### Religiosity
+We have two variables related to religiosity: religion (the religious affiliation professed by the respondent) and religious_minority (whether or not the respondent belongs to a religious minority group).
+
+For the first one it's better to show a cross table instead of a plot, since there are a lot of categories
+
+```{r}
+
+CrossTable(data$religion, data$trans_docs,
+           digits = 2, 
+           expected = FALSE, 
+           asresid = TRUE, 
+           chisq = TRUE, 
+           prop.chisq = FALSE, 
+           format = "SPSS")
+
+```
+
+Out of all observations Catholic, Atheists/Agnostic, Orthodox Christians and Protestants sum up to the 81.04% of our sample, being the rest underrepresented. I believe the warning "Chi-squared approximation may be incorrect" is because of this. Consequently I don't know if we can trust the p-value.
+
+```{r}
+data_summary <- data |> 
+  count(trans_docs, religious_minority, name = "n") |> 
+  group_by(religious_minority) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = religious_minority)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by religious minority",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within religious_minority",
+    fill = "religious_minority"
+  ) +
+  theme_minimal()
+
+
+```
+
+#### Ideology
+
+```{r}
+
+data_summary <- data |> 
+  count(trans_docs, left_right, name = "n") |> 
+  group_by(left_right) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = left_right)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by ideology",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within ideology",
+    fill = "ideology"
+  ) +
+  theme_minimal()
+```
+
+Stronger left-wing support for trans rights. Right-wing respondents are the most divided, with high opposition levels.
+Non-responses are highest among those without ideological alignment.
+
+### Relations with people belonging to minority groups
+
+```{r}
+
+# Number of friends belonging to a minority group
+ggplot(data, aes(x = trans_docs, y = friends_minorities, fill = trans_docs)) +
+  geom_boxplot() +
+  labs(
+    title = "Support by number of friends of a minority group",
+    x = "Support",
+    y = "number of friends of a minority group"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "none")
+
+```
+
+The number of minority friends seems to be related to support to question 19.
+The greater the number of minority friends, the greater the likelihood of supporting trans changing their documents.
+Those with few minority friends are more likely to be unsupportive or to have no clear opinion.
+
+### Having trans friends
+
+```{r}
+data_summary <- data |> 
+  count(trans_docs, friends_trans, name = "n") |> 
+  group_by(friends_trans) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = friends_trans)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by haivng trans friends",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within groups",
+    fill = "Has Trans Friends"
+  ) +
+  theme_minimal()
+
+```
+
+Having trans friends is associated with a higher support, while those who refuse to disclose their connections to trans people tend to oppose more. 
+
+
+## Paradata
+
+```{r}
+
+# Extracting labels in paradata
+list_label_tibbles <- lapply(names(paradata), function(col_name) {
+  labels <- attr(paradata[[col_name]], "labels")  
+  name_labels <- names(labels)  
+  if (!is.null(labels)) {
+    tibble(name_labels = name_labels, labels = labels)
+  } else {
+    NULL
+  }
+})
+
+# Asign names to list elements
+list_label_tibbles <- setNames(list_label_tibbles, names(paradata))
+
+# Convert into factor
+paradata <- paradata %>%
+  mutate(across(where(~ !is.null(attr(., "labels"))), labelled::to_factor))
+
+# Merging datasets for the analysis
+merged_paradata <- merge(data, paradata, by = "serialid", all.x = TRUE)
+
+```
+
+Number of persons present during interview
+```{r}
+library(gmodels)
+
+# Convert NA in a explicit category
+merged_paradata$trans_docs <- as.character(merged_paradata$trans_docs)   
+merged_paradata$trans_docs[is.na(merged_paradata$trans_docs)] <- "DK"  
+merged_paradata$trans_docs <- as.factor(merged_paradata$trans_docs)  
+
+# CrossTable
+CrossTable(merged_paradata$p4, merged_paradata$trans_docs,
+           digits=2, 
+           expected=F, 
+           asresid=T, 
+           chisq=TRUE, 
+           prop.chisq=F, 
+           format="SPSS")
+
+```
+The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents
+
+Regarding the duration of the interview we have 2 options p3 and p3r. We will use p3r to have a simpler analysis
+
+```{r}
+#i first did the graph calculating the percentages over the total, maybe plotting column percentages is better, or maybe we dont want to plot it. i leave it just in case
+
+# # Calculate percentages
+# plot_data <- merged_paradata %>%
+#   group_by(p3r, trans_docs) %>%
+#   summarise(count = n(), .groups = 'drop') %>%
+#   mutate(percentage = count / sum(count) * 100)
+# 
+# # Gráfico de barras agrupadas con porcentajes y etiquetas
+# ggplot(plot_data, aes(x = factor(p3r), y = percentage, fill = trans_docs)) +
+#   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +  # Barras agrupadas
+#   geom_text(
+#     aes(label = paste0(round(percentage, 1), "%")),  # Etiquetas de porcentaje
+#     position = position_dodge(width = 0.9), vjust = -0.5, size = 3
+#   ) +
+#   scale_y_continuous(labels = percent_format(scale = 1), limits = c(0, 30)) +  # Eje Y en porcentaje (0% a 100%)
+#   labs(
+#     title = "Support by Interview Duration",
+#     x = "Duration Categories",
+#     y = "Percentage",
+#     fill = "Response"
+#   ) +
+#   theme_minimal()
+
+# CrossTable
+CrossTable(merged_paradata$p3r, merged_paradata$trans_docs,
+           digits=2, 
+           expected=F, 
+           asresid=T, 
+           chisq=TRUE, 
+           prop.chisq=F, 
+           format="SPSS")
+
+```
+Respondent cooperation
+
+```{r}
+
+data_summary <- merged_paradata |> 
+  count(p5, trans_docs, name = "n") |> 
+  group_by(trans_docs) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = p5, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by Respondent cooperation",
+    x = "Respondent cooperation",
+    y = "Percentage within groups",
+    fill = "Support"
+  ) +
+  theme_minimal()
+
+
+# Calcular porcentajes
+plot_data <- merged_paradata %>%
+  group_by(p5, trans_docs) %>%
+  summarise(count = n(), .groups = 'drop') %>%
+  mutate(percentage = count / sum(count) * 100)
+
+```
+Respondents who engaged better in the survey were more likely to express support.
+
+--> are we doing EDA for country level variables?
 
 
 # Identify key socio-demogrpahic variables
