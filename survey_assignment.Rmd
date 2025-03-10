@@ -766,6 +766,51 @@ attr(data$disability_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
 attr(data$antilgbtq_rights, "label") <- "HIGHER -> THEY OPPOSE MORE RIGHTS TO LGBTQ"
 ```
 
+```{r}
+summary(data)
+```
+
+Our dataset seems quite balanced across the different countries
+
+```{r}
+data |> count(country)
+```
+
+Although some levels of occupation have more observations than others, we have enough observations for each level so we do not need to aggregate over different levels for the variable `occupation`
+
+```{r}
+data |> count(occupation)
+```
+
+Very few people declare themselves to be the higher class of society, nonetheless we keep this level because it makes sense
+
+```{r}
+data |> count(social_class)
+```
+
+Given the low number of observations in some categories and the high number of categories we opt to aggregate some of them, otherwise we risk too much noise in our models.
+
+```{r}
+data |> count(religion)
+data |> 
+  mutate(trans_docs=as.numeric(trans_docs)) |> 
+  summarise(mean = mean(trans_docs, na.rm=TRUE), .by = religion) |>
+  arrange(mean)
+# We are going to group together atheist with agnostic
+# We are also going to put sikh, buddhists, jewish and hindu into the other category
+# Finally we are going to group together all muslims
+
+data <- data |> 
+  mutate(religion = fct_collapse(religion,
+                                "Non-believers" = c("Atheist", "Non believer or agnostic"),
+                                "Other" = c("Sikh", "Buddhist", "Jewish", "Hindu", "Other"),
+                                "Muslim" = c("Muslim - Shia", "Muslim - Sunni", "Other Muslim")))
+
+#This is what we end up with
+data |> count(religion)
+```
+
+
 ### Missing values
 
 Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
@@ -795,10 +840,13 @@ data <- data %>%
 data <- data %>%
   mutate(social_class = fct_recode(social_class, NULL = "None (SPONTANEOUS)"))
 
+# We turn marital_status level OTHER into NAs, as it is difficult to give it any other meaning. Same for social class
+data <- data %>%
+  mutate(marital_status = fct_recode(marital_status, NULL = "Other (SPONT.)"),
+         social_class = fct_recode(social_class, NULL = "Other (SPONTANEOUS)")) 
 ```
 
 ```{r}
-summary(data)
 plot_intro(data)
 plot_missing(data)
 ```
