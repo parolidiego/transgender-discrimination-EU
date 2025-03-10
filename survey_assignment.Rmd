@@ -818,8 +818,11 @@ data <- data |>
   select(-c("disc_where", "disc_contact"))
 ```
 
+# Aggregating country-level data
 
-## Exploratoy Data Analysis 
+To be done...
+
+# Exploratoy Data Analysis 
 
 Plotting the distribution of the numeric variables 
 
@@ -847,7 +850,7 @@ for (var in numeric_vars) {
 }
 ```
 
-### Analysis of individual-level variables
+## Analysis of individual-level variables
 
 We must keep in mind our Target variable is qc19 "Do you think that transgender persons should be able to change their civil documents to match their inner gender identity?"
 
@@ -875,9 +878,9 @@ Taking a look to our variable of interest alone, we see how the 52.7% of our sam
 
 --> When we turned DK into NAs for all the factor variables, we also changed it for qc19 (now trans_docs). We should keep throughout our analysis in mind that NAs for qc19 are actually DK. Later we can code it as DK instead of NAs to have better graphs.
 
-#### Sociodemographic variables
+### Sociodemographic variables
 
-##### Gender
+#### Gender
 
 ```{r}
 data_summary <- data |> 
@@ -908,7 +911,7 @@ print(chisq_test)
 
 Men exhibit a lower percentage of favorable or dk responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
 
-##### Age
+#### Age
 
 ```{r}
 #ANOVA
@@ -918,7 +921,7 @@ summary(anova)
 
 There are significant differences between the groups defined by trans_docs.
  
-##### Religiosity
+#### Religiosity
 We have two variables related to religiosity: religion (the religious affiliation professed by the respondent) and religious_minority (whether or not the respondent belongs to a religious minority group).
 
 For the first one it's better to show a cross table instead of a plot, since there are a lot of categories
@@ -955,7 +958,7 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = religious_minori
   theme_minimal()
 ```
 
-##### Ideology
+#### Ideology
 
 ```{r}
 data_summary <- data |> 
@@ -979,27 +982,6 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = left_right)) +
 
 Stronger left-wing support for trans rights. Right-wing respondents are the most divided, with high opposition levels.
 Non-responses are highest among those without ideological alignment.
-
-### Relations with people belonging to minority groups
-
-```{r}
-
-# Number of friends belonging to a minority group
-ggplot(data, aes(x = trans_docs, y = n_friends_minorities, fill = trans_docs)) +
-  geom_boxplot() +
-  labs(
-    title = "Support by number of friends of a minority group",
-    x = "Support",
-    y = "number of friends of a minority group"
-  ) +
-  theme_minimal()+
-  theme(legend.position = "none")
-
-```
-
-The number of minority friends seems to be related to support to question 19.
-The greater the number of minority friends, the greater the likelihood of supporting trans changing their documents.
-Those with few minority friends are more likely to be unsupportive or to have no clear opinion.
 
 ### Having trans friends
 
@@ -1026,13 +1008,15 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = friends_trans)) 
 
 Having trans friends is associated with a higher support, while those who refuse to disclose their connections to trans people tend to oppose more. 
 
+## Country-level data
+
+Nothing yet...
 
 ## Paradata
 
 ```{r}
-
 # Extracting labels in paradata
-list_label_tibbles <- lapply(names(paradata), function(col_name) {
+list_label_tibbles_paradata <- lapply(names(paradata), function(col_name) {
   labels <- attr(paradata[[col_name]], "labels")  
   name_labels <- names(labels)  
   if (!is.null(labels)) {
@@ -1043,7 +1027,7 @@ list_label_tibbles <- lapply(names(paradata), function(col_name) {
 })
 
 # Asign names to list elements
-list_label_tibbles <- setNames(list_label_tibbles, names(paradata))
+list_label_tibbles_paradata <- setNames(list_label_tibbles_paradata, names(paradata))
 
 # Convert into factor
 paradata <- paradata %>%
@@ -1051,10 +1035,10 @@ paradata <- paradata %>%
 
 # Merging datasets for the analysis
 merged_paradata <- merge(data, paradata, by = "serialid", all.x = TRUE)
-
 ```
 
-Number of persons present during interview
+Number of persons present during interview: 
+
 ```{r}
 library(gmodels)
 
@@ -1073,35 +1057,12 @@ CrossTable(merged_paradata$p4, merged_paradata$trans_docs,
            format="SPSS")
 
 ```
+
 The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents
 
 Regarding the duration of the interview we have 2 options p3 and p3r. We will use p3r to have a simpler analysis
 
 ```{r}
-#i first did the graph calculating the percentages over the total, maybe plotting column percentages is better, or maybe we dont want to plot it. i leave it just in case
-
-# # Calculate percentages
-# plot_data <- merged_paradata %>%
-#   group_by(p3r, trans_docs) %>%
-#   summarise(count = n(), .groups = 'drop') %>%
-#   mutate(percentage = count / sum(count) * 100)
-# 
-# # Gráfico de barras agrupadas con porcentajes y etiquetas
-# ggplot(plot_data, aes(x = factor(p3r), y = percentage, fill = trans_docs)) +
-#   geom_bar(stat = "identity", position = position_dodge(width = 0.9)) +  # Barras agrupadas
-#   geom_text(
-#     aes(label = paste0(round(percentage, 1), "%")),  # Etiquetas de porcentaje
-#     position = position_dodge(width = 0.9), vjust = -0.5, size = 3
-#   ) +
-#   scale_y_continuous(labels = percent_format(scale = 1), limits = c(0, 30)) +  # Eje Y en porcentaje (0% a 100%)
-#   labs(
-#     title = "Support by Interview Duration",
-#     x = "Duration Categories",
-#     y = "Percentage",
-#     fill = "Response"
-#   ) +
-#   theme_minimal()
-
 # CrossTable
 CrossTable(merged_paradata$p3r, merged_paradata$trans_docs,
            digits=2, 
@@ -1118,7 +1079,7 @@ Respondent cooperation
 
 data_summary <- merged_paradata |> 
   count(p5, trans_docs, name = "n") |> 
-  group_by(trans_docs) |>  
+  group_by(p5) |>  
   mutate(percentage = n / sum(n))  
 
 ggplot(data_summary, aes(x = p5, y = percentage, fill = trans_docs)) +
@@ -1144,95 +1105,40 @@ plot_data <- merged_paradata %>%
 ```
 Respondents who engaged better in the survey were more likely to express support.
 
---> are we doing EDA for country level variables?
+# Imputing missing data
+
+To be done...
+
+### Analysis of missing values.
+
+Marga discussed the importance of understanding missing values. I think
+this will be an important section where we also model what type of
+people are more/less likely to not respond. It's a sort of robustness
+check to see how much we can trust the models. Or if specific
+demographics of people are less likely to respond, then we may trust it
+less.
+
+E.g. if men/religious people are less likely to respond, it could be an
+issue. Ideally we would test the representativeness of our respondents
+to the questions about transgender discrimination and the overall
+populations.
+
+# Explanatory model
+
+To be done...
+
+Idea was; run a stepwise with all individual data, get back important variables and then run a mixed model adding country level variables
+
+# Predictive model
+
+Summarize individual data to a country level (ex. percentage of population living in rural areas by country, percentage of people from minority x by country)
+
+Run random forest/gradient boosting/logistic regression with leave-one-out cross validation
 
 
 
-After that we can further discard some due to missingness, multicollinearity, irrelevance.
+### Brad's theory notes
 
-We need also to build the country level dataframe. Join all the country level data together.
-
-Then next steps would involve imputing NAs, building the country level dataframe and then we can start with correlation, discarding variables and modelling
-
-
-
-## INITIAL TESTING: Classification models for each country
-
-Trying to see how lmm functions work with indiviudal and country level data. 
-
-The primary package we will use is the lme4 package. 
-
-The toy data will be the individuals_df data from above, but joined on, will be the country level indicators. I am going to ignore the UK for now just for convenience and focus on modelling. UK data should be available later 
-
-First, create a country level table for all the data of interest: 
-
-
-```{r}
-id_vars <- c("studyno1", "studyno2", "doi", "version", "edition", "survey", "caseid", "uniqid", "serialid", "tnscntry", "country")
-# remove ID vars
-clean1 <- data |> 
-  select(-any_of(id_vars))
-
-#remove nationality variable (q1). Later, if we decide we need an immigration variable, we can impute national level data.  
-clean1 <- clean1 |> 
-  select(-any_of(starts_with("q1")))
-
-# remove generation variable, too similar to age
-clean1 <- clean1 |> 
-  select(-any_of(starts_with("gen")))
-
-# remove additional paradata
-# clean1 <- clean1 |> 
-#   select(-any_of(starts_with("p7", "p13")))
-
-```
-
-```{r}
-clean1 <- clean1 |> 
-  select(-any_of(starts_with(c("qa", "qb"))))
-```
-
-```{r}
-# individuals_df <- clean1 |>
-# 
-#   #use select function and rename all the in scope variables
-#   select(
-#       isocntry,
-#       # countryid,
-#       # country_names,
-# 
-# 
-#       target_var = qc19,
-# 
-#     # socioeconomic variables for individuals
-#       gender = d10,
-#       age = d11,
-#       age_4cat = d11r1,
-#       age_6cat = d11r2,
-#       age_7cat = d11r3,
-#       polit_ideology = d1,
-#       educ_5cat = d8r2, # all the education vars have low cutoffs
-#       educ_11cat = d8r1,
-#       lifesat = d70,
-#       religion = sd3,
-#       class = d63,
-#       occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
-#       financialstress = d60, #difficulty paying bills
-#       polintr # no need to rename political interest var
-# 
-#     # # paradata variables
-#     #   int_date = p1,
-#     #   int_time = p2,
-#     #   int_length = p3r, #using recoded var instead of base p3
-#     #   int_ppl_present = p4,
-#     #   int_resp_coop = p5,
-#     #   int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
-#     #   #p7 not useful, location, no data for p8-11
-#     # 
-#     #   #p13 is language of interview. Probably not useful?
-#       )
-
-```
 
 ```{r}
 # country_level_data <- codelist |> 
@@ -1251,8 +1157,6 @@ clean1 <- clean1 |>
 #          overall_gender_equality_index)
 ```
 
-Now set our test data. for ease, we will remove the UK from the main data then join on all others (as UK has some NA obs for gender equality index + gdp to be amended)
-
 ```{r}
 # 
 # complete_df <- individuals_df |> 
@@ -1263,6 +1167,8 @@ Now set our test data. for ease, we will remove the UK from the main data then j
 #   
 ```
 
+#### Running a different logistic model for each country
+
 We now have a table to test some glmer modelling on. 
 
 We have table of 26,416 row table with 20 columns. This represents 27 countries. 
@@ -1272,6 +1178,7 @@ Following this tutorial Marga sent and applying to the test data:
 https://raffaelevacca.github.io/Intro-multilevel-with-R/
 
 Testing a nested dataset by country
+
 ```{r}
 # 
 # nested.cntry <- complete_df %>% 
@@ -1310,16 +1217,14 @@ Using the nested data, we now run a model for each country:
 ```
 
 
-## Basics of Linear mixed models in R
+#### Mixed models
 
 Fixed effects: Things that are the same across the cluster
 Random effects: Things that change within the cluster 
 
 The fixed and random effects could refer to either the intercept or the slope, as these can both vary between groups.
 
-### The names and structure of different LMM models in R: 
-
-#### LMM equation structure in R
+##### LMM equation structure in R
 
 To run a multilevel linear model, we use the lmer() function (“Linear Mixed Effects in R”) from the lme4 package. The syntax is similar to regression. 
 everything to the left of the | indicates the effects that should be random, and the variable to the right of the | is the grouping variable across which the effects should vary
@@ -1342,7 +1247,7 @@ This has no slope, but random intercepts. It basically just takes the average. I
 
 For each, Y=target, X = independent vars (can be many)
 
-#### Standard LMM Modelling Strategy
+##### Standard LMM Modelling Strategy
 (sourced from slides here: https://favstats.github.io/intro_multilevel/slides/#54)
 ^ This is a useful resource, it goes through an ESS modelling doc 
 
@@ -1356,7 +1261,7 @@ Approach to multilevel model building based on Hox (2010)
 
 Each step, check whether your model is significantly improved compared to the previous one.
 
-### Basic LMM testing with toy data 
+##### Basic LMM testing with toy data 
 
 First, null model:
 ```{r}
@@ -1479,95 +1384,3 @@ _Useful calculations:_
   - ICC (intra cluster correlation. How alike each of the observations within each group are)
   - ANOVA for model comparison: anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
 
-
-
-
---------------------------------------------------------------------
-
-think the section below is probably redundant now but just leaving until I check properly. 
-
---------------------------------------------------------------------
-
-
-
-### Impute actual NA values
-
-As these are inconsistent between each variable, I guess we need to
-override and decide if we then impute the NA values.
-
-Clean the education variable. Currently we have: d8 - Education, how old
-were you when you stopped full time education (Student = 00; No
-education = 01; refusal = 98; DK = 99 - d8r1 -\> 11 category recode -
-d8r2 -\> 5 category recode
-
-Clean the
-
-```{r}
-# table(data_raw$d8, data_raw$d8r2)
-# 
-# # First, recode the d8 values that are given as NA or student/no education
-# clean1 |> 
-#   mutate(educ = if_else(d8 %in% c(0, 1, 98, 99), NA, d8))
-# 
-# # if d8 = 0, they are a current student. 
-
-```
-
-### Analysis of missing values.
-
-Marga discussed the importance of understanding missing values. I think
-this will be an important section where we also model what type of
-people are more/less likely to not respond. It's a sort of robustness
-check to see how much we can trust the models. Or if specific
-demographics of people are less likely to respond, then we may trust it
-less.
-
-E.g. if men/religious people are less likely to respond, it could be an
-issue. Ideally we would test the representativeness of our respondents
-to the questions about transgender discrimination and the overall
-populations.
-
-```{r}
-#plot_missing()
-summary(data_raw$d11)
-# returns nothing now because of NA values are all hard coded as mixed values e.g. some are 7, 98, 12. We probably need to standardise, section above maybe
-  
-```
-
-## Descriptive data analysis and checks to start
-
-Run comparisons by country to compare ages, gender distribution, Number
-of respondents per country
-
-```{r}
-# number of respondents 
-```
-
-## Testing replication of the initial plot:
-
--   basic version only.
-
-```{r}
-
-```
-
--   we could also recreate without any NA values to see if it makes the
-    plot just seem visually more even to start?
-
-## Modelling
-
-Some initial thoughts:
-
-a)  modelling the target variables
-    -   base model -\> using linear mixed model to analyse individual
-        and country level differences
-
-    -   model including paradata -\> see if these impacted outcomes too
-
-b\. modelling differences in non-response?
-
--   I feel like Marga mentioned this? we would need to just create a
-    dummy variable for NA response to the target variable question. This
-    is our secondary model target variable. I guess this could be a
-    classification model? for discussion but also more thoughts in my
-    missing data note above...
