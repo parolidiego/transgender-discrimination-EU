@@ -49,7 +49,7 @@ data_raw <- read_dta("ZA7575.dta")
 
 This is for joins:
 ```{r}
-# builidng a df with country names and codes for the EU-28
+# building a df with country names and codes for the EU-28
 codelist <- countrycode::codelist |> 
   select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
   filter(!is.na(eu28)) 
@@ -194,6 +194,13 @@ lgbt_rights_index <- lgbt_rights_index |>
 
 str(lgbt_rights_index)
 ```
+Column names can be renamed:
+```{r}
+lgbt_rights_index <- lgbt_rights_index |> 
+  rename(country_name = Entity,
+         country_code = Code,
+         lgbt_policy_index = LGBT..Policy.Index) 
+```
 
 ### Gender inequality index
 
@@ -212,8 +219,49 @@ gender_index |>
 
 str(gender_index)
 ```
+We checked that we have indeed 28 distinct countries in the dataset.
 
-This dataset now has 560 rows for the EU-28 countries, it has many indicators apart from the indexes values, which we will have to decide if we keep or not.
+This dataset collects many indicators apart from the indexes values. 
+We are selecting only the Gender Development and Gender Inequality indexes (GDI and GII):
+```{r}
+gender_index <- gender_index |> 
+  filter(indicatorCode %in% c("gdi", "gii")) |> 
+  select(-c(indexCode, indicatorCode, indicator)) |> # removing redundant columns
+  pivot_wider(names_from = index, values_from = value)
+
+colnames(gender_index) <- janitor::make_clean_names(colnames(gender_index)) # cleaning spaces and upper cases
+```
+
+And then exploring them to see which one is a better fit for modeling and predictions:
+
+```{r}
+summary(gender_index$gender_inequality_index)
+summary(gender_index$gender_development_index)
+
+sd(gender_index$gender_inequality_index)
+sd(gender_index$gender_development_index)
+```
+We observe that the second one (Gender Development Index) has a very small range,
+indicating that most countries have nearly identical scores. This is supported by
+the standard deviation, which shows that the GII is more spread out than the GDI. 
+Being almost constant, GDI won’t add much value to the analysis. This is likely due
+to the fact that these indexes are created by the United Nations Development Programme 
+for all countries, so it may not capture the finer differences between EU countries.
+
+```{r}
+cor(gender_index$gender_inequality_index, 
+    gender_index$gender_development_index, 
+    use = "complete.obs")
+```
+Surprisingly, the two indexes have a very weak positive correlation. While they are
+not inverse, I was expecting them to measure opposite things, so maybe the correlation
+coefficient is not useful here because of the low variation of both variables (specially
+GDI).
+I don't know what else to do with this info other than keeping GII and discarding GII.
+```{r}
+gender_index <- gender_index |> 
+  select(-gender_development_index)
+```
 
 ### Economist's Democracy Index
 
@@ -244,6 +292,12 @@ str(democracy_index)
 In both of these tables (Gender Equality and Democracy indexes) there
 are more indicators apart from the overall indexes, we have to decide if
 we think they're useful or if we can discard some/all of them.
+
+```{r}
+democracy_index <- democracy_index |> 
+  select(country_name, country_code, democracy_index)
+```
+
 
 # Data cleaning
 
@@ -1031,6 +1085,50 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = left_right)) +
 Stronger left-wing support for trans rights. Right-wing respondents are the most divided, with high opposition levels.
 Non-responses are highest among those without ideological alignment.
 
+#### Social class
+
+```{r}
+
+data_summary <- data |> 
+  count(trans_docs, social_class, name = "n") |> 
+  group_by(social_class) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = social_class)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by social class",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within social class",
+    fill = "social class"
+  ) +
+  theme_minimal()
+```
+
+### Relations with people belonging to minority groups
+
+```{r}
+
+# Number of friends belonging to a minority group
+ggplot(data, aes(x = trans_docs, y = friends_minorities, fill = trans_docs)) +
+  geom_boxplot() +
+  labs(
+    title = "Support by number of friends of a minority group",
+    x = "Support",
+    y = "number of friends of a minority group"
+  ) +
+  theme_minimal()+
+  theme(legend.position = "none")
+
+```
+
+The number of minority friends seems to be related to support to question 19.
+The greater the number of minority friends, the greater the likelihood of supporting trans changing their documents.
+Those with few minority friends are more likely to be unsupportive or to have no clear opinion.
+
 ### Having trans friends
 
 ```{r}
@@ -1217,9 +1315,32 @@ Run random forest/gradient boosting/logistic regression with leave-one-out cross
 
 #### Running a different logistic model for each country
 
-We now have a table to test some glmer modelling on. 
+Trying to see how lmm functions work with indiviudal and country level data. 
 
-We have table of 26,416 row table with 20 columns. This represents 27 countries. 
+The primary package we will use is the lme4 package. 
+
+First, create a country level table for all the data of interest: 
+
+```{r}
+country_level_data <- codelist |> 
+  select(iso3c, iso2c) |> 
+  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
+  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
+  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
+  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
+  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
+  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
+```
+
+
+```{r}
+complete_df <- merged_paradata |> 
+  left_join(country_level_data, 
+            by = join_by(country == iso2c)) |> 
+  select(-c(country.y, iso3c))
+```
+
+We now have a table to test some glmer modelling on. 
 
 Following this tutorial Marga sent and applying to the test data: 
 
@@ -1228,40 +1349,37 @@ https://raffaelevacca.github.io/Intro-multilevel-with-R/
 Testing a nested dataset by country
 
 ```{r}
-# 
-# nested.cntry <- complete_df %>% 
-#   group_by(isocntry) %>%
-#   nest()
-# 
-# # The column nested.df$data is a list of data frames, one for each country
-# class(nested.cntry$data) # type, list
-# length(nested.cntry$data) # number of countries
-# 
-# # to unnest()
-# nested.cntry %>%
-#   filter(isocntry == "AT") %>%
-#   dplyr::select(isocntry, data) %>%
-#   unnest(cols = c(data))
-# 
+nested.cntry <- complete_df %>% 
+  group_by(country) %>%
+  nest()
 
+# The column nested.df$data is a list of data frames, one for each country
+class(nested.cntry$data) # type, list
+length(nested.cntry$data) # number of countries
+
+# to unnest()
+nested.cntry %>%
+  filter(country == "AT") %>%
+  dplyr::select(country, data) %>%
+  unnest(cols = c(data))
 ```
 
 Using the nested data, we now run a model for each country:
 
 ```{r}
-# # fit separate lm for each each element of nested.cntry$data)
-# lmodels <- nested.cntry %>%
-#   # Get all school data frames
-#   pull(data) %>%
-#   # Run glm() on each via map because it's a classification model
-#     # model run against all vairables for now. 
-#   purrr::map(~ glm(target_var ~ ., 
-#                    data= .x,
-#                    family = "binomial"))
-# 
-# # show that it's a list and we can call each elements regression output. 
-# class(lmodels)
-# lmodels[4]
+# fit separate lm for each each element of nested.cntry$data)
+lmodels <- nested.cntry %>%
+  # Get all data frames
+  pull(data) %>%
+  # Run glm() on each via map because it's a classification model
+    # model run against all vairables for now. 
+  purrr::map(~ glm(trans_docs ~ ., 
+                   data= .x,
+                   family = "binomial"))
+
+# show that it's a list and we can call each elements regression output. 
+class(lmodels)
+lmodels[4]
 ```
 
 
@@ -1313,12 +1431,12 @@ Each step, check whether your model is significantly improved compared to the pr
 
 First, null model:
 ```{r}
-# m_null <- glmer(target_var ~ (1|isocntry),
-#                data = complete_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
-# summary(m_null)
+m_null <- glmer(trans_docs ~ (1|country),
+               data = complete_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+summary(m_null)
 ```
 
 To come back and reinterpret... don't really know at this stage.
@@ -1349,13 +1467,13 @@ Random effects model
 - Including individual level variables only with country: 
 
 ```{r}
-# n_randeffect <- glmer(target_var ~ 
-#                         gender + age + I(age^2) + lifesat + religion + class + 
-#                         (1|isocntry),
-#                data = complete_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
+n_randeffect <- glmer(trans_docs ~ 
+                        gender + age + I(age^2) + life_sat + religion + social_class + 
+                        (1|country),
+               data = complete_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
 ```
 This suggests the data needs to be rescaled, to check which variables are the issue:
 ```{r}
@@ -1383,16 +1501,16 @@ Re check the random effects model with scaled data:
 
 ## this took a long time to try run so removed variables. The nAGQ also adds time but fine for now
 
-# n_randeffect <- glmer(target_var ~ 
-#                         gender + age + I(age^2) + lifesat + (1|isocntry),
-#                data = scaled_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
-# 
-# 
-# 
-# summary(n_randeffect)
+n_randeffect <- glmer(trans_docs ~ 
+                        gender + age + I(age^2) + life_sat + (1|country),
+               data = scaled_df,
+               family = "binomial",
+               control = glmerControl(optimizer = "bobyqa"),
+               nAGQ = 10)
+
+
+
+summary(n_randeffect)
 ```
 
 Can we interpret this...
