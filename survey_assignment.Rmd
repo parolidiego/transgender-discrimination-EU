@@ -35,6 +35,7 @@ library(scales)
 library(tidyr)
 library(kableExtra)
 library(gmodels)
+library(flexplot)
 ```
 
 # Loading data
@@ -154,17 +155,24 @@ constitutional ban on marriage and still have legally recognized civil
 unions. Thus maybe we should exclude this level from this variable as it
 is not exclusive. The lowest level would remain no recognition.
 
-+Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
+Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
 
-//////////
+<br>
 
 The table is up to date, so I had to check (on Wikipedia honestly) what year each of those items was actually legalized and I got to this:
+
 -----------------------------same sex marriage-----------------------------
+
 Greece: civil unions since 2015, marriage since 2024
+
 Estonia: civil unions since 2016, marriage since 2024
+
 Slovenia: civil unions since 2017, marriage since 2022
+
 United Kingdom: marriage since 2014 in England, Scotland and Wales, and since 2020 in Northern Ireland. Civil unions since 2005
+
 ---------------------------------civil unions-----------------------------------
+
 Latvia: civil unions since 2024, the Constitution prohibits the recognition of same sex marriage since 2006.
 
 ```{r}
@@ -223,6 +231,7 @@ We checked that we have indeed 28 distinct countries in the dataset.
 
 This dataset collects many indicators apart from the indexes values. 
 We are selecting only the Gender Development and Gender Inequality indexes (GDI and GII):
+
 ```{r}
 gender_index <- gender_index |> 
   filter(indicatorCode %in% c("gdi", "gii")) |> 
@@ -922,9 +931,30 @@ data <- data |>
 
 # Aggregating country-level data
 
-To be done...
+```{r}
+country_level_data <- codelist |> 
+  select(iso3c, iso2c) |> 
+  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
+  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
+  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
+  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
+  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
+  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
+str(country_level_data)
+```
 
-# Exploratoy Data Analysis 
+Not using paradata for now. We can discuss how to use it
+
+```{r}
+complete_df <- data |> 
+  left_join(country_level_data, 
+            by = join_by(country == iso2c)) |> 
+  select(-c(country.y, iso3c))
+
+str(complete_df)
+```
+
+# Exploratory Data Analysis 
 
 Plotting the distribution of the numeric variables 
 
@@ -1108,27 +1138,6 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = social_class)) +
   theme_minimal()
 ```
 
-### Relations with people belonging to minority groups
-
-```{r}
-
-# Number of friends belonging to a minority group
-ggplot(data, aes(x = trans_docs, y = friends_minorities, fill = trans_docs)) +
-  geom_boxplot() +
-  labs(
-    title = "Support by number of friends of a minority group",
-    x = "Support",
-    y = "number of friends of a minority group"
-  ) +
-  theme_minimal()+
-  theme(legend.position = "none")
-
-```
-
-The number of minority friends seems to be related to support to question 19.
-The greater the number of minority friends, the greater the likelihood of supporting trans changing their documents.
-Those with few minority friends are more likely to be unsupportive or to have no clear opinion.
-
 ### Having trans friends
 
 ```{r}
@@ -1283,62 +1292,11 @@ Run random forest/gradient boosting/logistic regression with leave-one-out cross
 
 
 
-### Brad's theory notes
+## Brad's theory notes
 
-
-```{r}
-# country_level_data <- codelist |> 
-#   left_join(gdp_data, by = join_by(country.name.en == country)) |> 
-#   left_join(rural_data, by = join_by(iso3c == country_code)) |> 
-#   # left_join(marriage_data, by = join_by(country.name.en == Country)) |> # excluding the marriage data for now because it has multiple variables for the same country
-#   left_join(democracy_index, by = join_by(iso3c == country_code)) |> 
-#   left_join(gequality_index, by = join_by(country.name.en == country_name))
-# 
-# country_level_testdata <- country_level_data |> 
-#   select(iso2c, 
-#          gdp_pc, 
-#          #marriage_stat = Status, #rename
-#          rural_pop_percentage, 
-#          democracy_index, 
-#          overall_gender_equality_index)
-```
-
-```{r}
-# 
-# complete_df <- individuals_df |> 
-#   filter(isocntry != "GB") |> 
-#   left_join(country_level_testdata, 
-#             by = join_by(isocntry == iso2c)) |> 
-#   filter(!is.na(target_var)) # remove NA for our target variable. 
-#   
-```
+Leaving this section here, it is to be deleted as we incorporate what we need from here into the explanatory model part
 
 #### Running a different logistic model for each country
-
-Trying to see how lmm functions work with indiviudal and country level data. 
-
-The primary package we will use is the lme4 package. 
-
-First, create a country level table for all the data of interest: 
-
-```{r}
-country_level_data <- codelist |> 
-  select(iso3c, iso2c) |> 
-  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
-  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
-  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
-  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
-  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
-  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
-```
-
-
-```{r}
-complete_df <- merged_paradata |> 
-  left_join(country_level_data, 
-            by = join_by(country == iso2c)) |> 
-  select(-c(country.y, iso3c))
-```
 
 We now have a table to test some glmer modelling on. 
 
@@ -1349,39 +1307,38 @@ https://raffaelevacca.github.io/Intro-multilevel-with-R/
 Testing a nested dataset by country
 
 ```{r}
-nested.cntry <- complete_df %>% 
-  group_by(country) %>%
-  nest()
+# Commented the below as we are probably not gonna use it
 
-# The column nested.df$data is a list of data frames, one for each country
-class(nested.cntry$data) # type, list
-length(nested.cntry$data) # number of countries
+# nested.cntry <- complete_df %>% 
+#   group_by(country) %>%
+#   nest()
+# 
+# # The column nested.df$data is a list of data frames, one for each country
+# class(nested.cntry$data) # type, list
+# length(nested.cntry$data) # number of countries
+# 
+# # to unnest()
+# nested.cntry %>%
+#   filter(country == "AT") %>%
+#   dplyr::select(country, data) %>%
+#   unnest(cols = c(data))
 
-# to unnest()
-nested.cntry %>%
-  filter(country == "AT") %>%
-  dplyr::select(country, data) %>%
-  unnest(cols = c(data))
+# # Using the nested data, we now run a model for each country:
+
+# # fit separate lm for each each element of nested.cntry$data)
+# lmodels <- nested.cntry %>%
+#   # Get all data frames
+#   pull(data) %>%
+#   # Run glm() on each via map because it's a classification model
+#     # model run against all vairables for now. 
+#   purrr::map(~ glm(trans_docs ~ ., 
+#                    data= .x,
+#                    family = "binomial"))
+# 
+# # show that it's a list and we can call each elements regression output. 
+# class(lmodels)
+# lmodels[4]
 ```
-
-Using the nested data, we now run a model for each country:
-
-```{r}
-# fit separate lm for each each element of nested.cntry$data)
-lmodels <- nested.cntry %>%
-  # Get all data frames
-  pull(data) %>%
-  # Run glm() on each via map because it's a classification model
-    # model run against all vairables for now. 
-  purrr::map(~ glm(trans_docs ~ ., 
-                   data= .x,
-                   family = "binomial"))
-
-# show that it's a list and we can call each elements regression output. 
-class(lmodels)
-lmodels[4]
-```
-
 
 #### Mixed models
 
@@ -1475,33 +1432,24 @@ n_randeffect <- glmer(trans_docs ~
                control = glmerControl(optimizer = "bobyqa"),
                nAGQ = 10)
 ```
-This suggests the data needs to be rescaled, to check which variables are the issue:
-```{r}
-# library(caret)
-# # check for nearzero variance, if so those could be removed
-# nearZeroVar(complete_df, saveMetrics = TRUE)
-# # see no issues. So all variables stay.
-# 
-# # will recode the numeric variables I selected, which is only age
-# scaled_df <- complete_df |> 
-#   mutate(across(where(is.numeric), scale))
 
+This suggests the data needs to be rescaled, to check which variables are the issue:
+
+```{r}
+library(caret)
+# check for nearzero variance, if so those could be removed
+nearZeroVar(complete_df, saveMetrics = TRUE)
+# see no issues. So all variables stay.
+
+# will recode the numeric variables I selected, which is only age
+scaled_df <- complete_df |>
+  mutate(across(where(is.numeric), scale))
 ```
 
 Re check the random effects model with scaled data:
 
 ```{r}
-# n_randeffect <- glmer(target_var ~ 
-#                         gender + age + I(age^2) + lifesat + religion + class + 
-#                         (1|isocntry),
-#                data = scaled_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
-
-## this took a long time to try run so removed variables. The nAGQ also adds time but fine for now
-
-n_randeffect <- glmer(trans_docs ~ 
+n_randeffect <- glmer(trans_docs ~
                         gender + age + I(age^2) + life_sat + (1|country),
                data = scaled_df,
                family = "binomial",
@@ -1514,11 +1462,6 @@ summary(n_randeffect)
 ```
 
 Can we interpret this...
-
-```{r}
-
-```
-
 
 
 
