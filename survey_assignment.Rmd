@@ -156,8 +156,6 @@ is not exclusive. The lowest level would remain no recognition.
 
 +Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
 
-
-
 //////////
 
 The table is up to date, so I had to check (on Wikipedia honestly) what year each of those items was actually legalized and I got to this:
@@ -184,7 +182,6 @@ marriage_data <- marriage_data |>
 marriage_data |> filter(Country %in% c("Latvia", "Greece", "Estonia", "Slovenia", "United Kingdom"))
 ```
 
-
 I also found this LGBT rights index on Our World in Data (<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures whether LGBT+ people enjoy the same rights as cisgender people combining information on 18 different policies. It includes the legal status of same-sex marriage so we might keep only one of these.
 
 ```{r}
@@ -198,8 +195,7 @@ lgbt_rights_index <- lgbt_rights_index |>
 str(lgbt_rights_index)
 ```
 
-
-### Gender related tables
+### Gender inequality index
 
 Gender Development and Gender Inequality indexes, developed by the United Nations Development. Retrieved from <https://hdr.undp.org/data-center/documentation-and-downloads> for the year 2019.
 
@@ -218,7 +214,6 @@ str(gender_index)
 ```
 
 This dataset now has 560 rows for the EU-28 countries, it has many indicators apart from the indexes values, which we will have to decide if we keep or not.
-
 
 ### Economist's Democracy Index
 
@@ -446,10 +441,6 @@ data <- data_raw |>
          netuse, # internet index
          d63, # social class
          starts_with("d72"), # my voice counts
-         # nuts, nutslvl, # region in which interview is carried out?
-         # cntry_de useful?
-         # starts_with("eu"), # groups by eu/eurozone memberships
-         # starts_with("w"), # weights for what?
   )
 
 paradata <- data_raw |> 
@@ -556,7 +547,9 @@ list_label_tibbles$d11r1
 Right column is what it appears in our data (as a number). Left column
 is the label that we must assign to that number when we factorize
 
-## Start cleaning
+## Cleaning
+
+### Initial cleaning and pre-processing
 
 ```{r}
 # Recoding together Germany East and West because we are running analysis at the country level
@@ -586,6 +579,8 @@ non_factor_variables <- c("serialid", "tnscntry", "isocntry", "d11", "q1_29",
                           "d8", "opls")
 factor_variables <- setdiff(names(data), non_factor_variables)
 ```
+
+Correctly encoding the factor variables that do not need any further cleaning
 
 ```{r}
 # Converting them to factors and assign them their labels automatically
@@ -617,12 +612,14 @@ data <- data |>
   select(-q1_29)
 ```
 
+Dealing with the other variables on which we do some further pre-processing (feature engineering)
+
 ```{r}
 # Creating a variable that counts the number of different minority groups a person has acquaintances with
 data <- data |>  
   mutate(across(starts_with("sd1"), ~ if_else(.x == 1, 1, 0))) |> 
-  mutate(friends_minorities = sd1_1+sd1_2+sd1_3+sd1_4+sd1_5+sd1_6+sd1_8) |> 
-  relocate(friends_minorities, .before="sd1_1") |> 
+  mutate(n_friends_minorities = sd1_1+sd1_2+sd1_3+sd1_4+sd1_5+sd1_6+sd1_8) |> 
+  relocate(n_friends_minorities, .before="sd1_1") |> 
   select(-starts_with("sd1"))
 
 # Creating a variable that counts the number of actions against discrimination that you have taken in the last year
@@ -636,7 +633,7 @@ data <- data |>
 ```{r}
 # Building a discriminatory score
 data <- data |> 
-  # Coding as NAs it depends and DK
+  # Coding as NAs "it depends" and "DK"
   mutate(across(starts_with("qc12"), ~ if_else(.x >= 12, NA, .x))) |> 
   mutate(across(starts_with("qc13"), ~ if_else(.x >= 12, NA, .x))) |> 
   # Coding as 5 responses = indifferent
@@ -660,7 +657,12 @@ data <- data |>
          old_discri = 11 - rowMeans(cbind(qc12_15, qc13_15), na.rm = TRUE)) |> 
   select(-starts_with("qc12")) |> 
   select(-starts_with("qc13"))
-# Young and old can probably be discarded, maybe religious can be aggregated
+
+# I am deleting the discrimination index against young and old people
+# This is because one of the question is: how comfortable you would feel if one of your children was in a love relationship with a person from group x.
+# It is totally acceptable that people would not feel comfortable with their kid dating an old person without that accounting for being discriminatory against old people
+data <- data |> 
+  select(-c("old_discri", "young_discri"))
 ```
 
 ```{r}
@@ -673,7 +675,7 @@ data <- data |>
 ```
 
 ```{r}
-# My voice counts
+# My voice counts index
 data <- data |> 
   mutate(across(starts_with("d72"), ~ if_else(.x > 4, NA, .x))) |>
   mutate(social_alienation = rowMeans(cbind(d72_1, d72_2), na.rm = TRUE)) |> 
@@ -681,75 +683,13 @@ data <- data |>
 # The higher the more people think their voice does not matter
 ```
 
-<br><br>
-
-<<<<<<< Updated upstream
-SITUATION SO FAR
-
-<<<<<<< Updated upstream
 This should be our final selection of variables.
 
-We still need to rename them appropriately and check that all the NAs are correctly encoded by looking at the summary. Below I left some comments about the things to do to finish the cleaning.
+We still need to rename them appropriately and check that all the NAs are correctly encoded by looking at the summary.
 
-After that we can further discard some due to missingness, multicollinearity, irrelevance.
-
-We need also to build the country level dataframe. Join all the country level data together.
-
-Then next steps would involve imputing NAs, building the country level dataframe and then we can start with correlation, discarding variables and modelling
+Rename columns appropriately and move them around to order the dataframe
 
 ```{r}
-# TO-DO-LIST
-
-# friends_trans REFUSAL level - leave it like that or NAs?
-
-# sd3 look more into that for NAs or aggregations as not all levels are printed with summary
-
-# qc2_15 we need to adjust the labels: not mentioned=have been discriminated against; No, you haven’t been discriminated against or experienced harassment=no discrimination experienced
-
-# qc10 look more into that for NAs or aggregations as not all levels are printed with summary
-
-#d1r1 correctly encode NAs
-
-#d7r1 correctly encode NAs
-
-#d15a_r2 look more into that for NAs as not all levels are printed with summary
-
-#d60 REFUSAL must be turned into NAs?
-
-#d63 look more into that for NAs as not all levels are printed with summary
-
-# and more? I think this is it
-```
-
-
-Recoding correclty all NAs
-
-Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
-
-```{r}
-
-factor_variables <- names(data)[sapply(data, is.factor)]
-
-data <- data %>%
-  mutate(across(
-    all_of(setdiff(factor_variables, "friends_trans")),  # Exclude "friends_trans"
-    ~ {
-      refusal_levels <- grep("REFUSAL", levels(.), value = TRUE, ignore.case = TRUE)  # Look for levels that contain "REFUSAL"
-      if (length(refusal_levels) > 0) {  # If there are levels containing "REFUSAL"
-        fct_recode(., NULL = refusal_levels)  # Convert in NA
-      } else {
-        .  # if not remain without changes
-      }
-    }
-  ))
-
-```
-
-
-Rename columns appropriately
-
-```{r}
-
 data <- data |> 
   rename(
     country = isocntry,
@@ -761,7 +701,7 @@ data <- data |>
     sexual_minority = sd2_5,
     disability_minority = sd2_6,
     religion = sd3,
-    disc_no = qc2_15,
+    disc = qc2_15,
     disc_where = qc3,
     disc_contact = qc10,
     trans_docs = qc19,
@@ -775,44 +715,115 @@ data <- data |>
     bill_issues = d60,
     internet_use = netuse,
     social_class = d63
-  )
-
+  ) 
 ```
 
-
-Adding a dummy variable for gender (I am keeping the original one in case is useful)
-
-```{r}
-data$man <- ifelse(data$gender == "Man", 1, 0)
-
-```
-
-
-Now, we will transform the variable disc_no, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward.
+Now, we will transform the variable disc, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward. The variable is 1 if a person has been subject to discrimination
 
 ```{r}
-
 data <- data |> 
-  mutate(suffered_discr = ifelse(disc_no == "Not mentioned", 1, 0)) |> 
-  select(-disc_no) 
+  mutate(suffered_discr = as.factor(ifelse(disc == "Not mentioned", 1, 0))) |> 
+  select(-disc) |> 
+  relocate(suffered_discr, .before = disc_where)
+```
+
+```{r}
+# Relocating to have a ordered df
+data <- data |> 
+  relocate(c("age", "gender", "years_edu","community", "marital_status", "occupation", "social_class", "religion", "nonEU_national", "phone_access", "bill_issues", "internet_use"), .after = country) |> 
+  relocate(c("left_right", "social_alienation"), .after = polintr) |> 
+  relocate(c("friends_trans", "n_friends_minorities", "n_actions_against_discri"), .after = gender_docs)
+
+# Assigning labels to columns which have a difficult meaning
+attr(data$gender, "label") <- NULL
+attr(data$nonEU_national, "label") <- "OWNS A NON-EU NATIONALITY"
+attr(data$social_alienation, "label") <- "HIGHER -> THINK THEIR VOICE DOESN'T  MATTER"
+attr(data$ethnic_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$skincolor_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$religious_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$roma_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$sexual_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$disability_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$disability_minority, "label") <- "ARE YOU PART OF X MINORITY" 
+attr(data$disability_minority, "label") <- "ARE YOU PART OF X MINORITY"
+attr(data$suffered_discr, "label") <- "HAVE YOU BEEN SUBJECT TO DISCRIMINATION"
+attr(data$n_friends_minorities, "label") <- "YOU KNOW PEOPLE FROM # NUMBER OF DIFFERENT MINORITES"
+attr(data$n_actions_against_discri, "label") <- "YOU HAVE DONE # NUMBER OF DIFFERENT ACTIONS TO FIGHT DISCRIMINATIONS"
+attr(data$roma_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$black_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$asian_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$white_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$jewish_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$muslim_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$buddihst_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$christian_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$atheist_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$atheist_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$lgb_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$trans_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$intersex_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$disability_discri, "label") <- "HOW DISCRIMINATORY ARE YOU AGAINST X"
+attr(data$antilgbtq_rights, "label") <- "HIGHER -> THEY OPPOSE MORE RIGHTS TO LGBTQ"
+```
+
+### Missing values
+
+Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
+
+```{r}
+factor_variables <- names(data)[sapply(data, is.factor)]
+
+data <- data %>%
+  mutate(across(
+    all_of(setdiff(factor_variables, "friends_trans")),  # Exclude "friends_trans"
+    ~ {
+      # Look for levels that contain "REFUSAL"
+      refusal_levels <- grep("REFUSAL", levels(.), value = TRUE, ignore.case = TRUE)
+      # If there are levels containing "REFUSAL"
+      if (length(refusal_levels) > 0) { 
+        # Convert in NA
+        fct_recode(., NULL = refusal_levels)  
+      } 
+      # if not remain without changes
+      else {
+        .  
+      }
+    }
+  ))
+
+# Mutate NONE level of social class to NA
+data <- data %>%
+  mutate(social_class = fct_recode(social_class, NULL = "None (SPONTANEOUS)"))
 
 ```
 
-
-Candela: I don't know if we have stepped on each other's toes at some point. I can't run the "identify key sociodemographic" chunk because it can't find clean1 (maybe we deleted it by accident?).
-
-
-# checking missing data again, once refusals etc has also been dealed with
 ```{r}
+summary(data)
+plot_intro(data)
 plot_missing(data)
 ```
 
-we should consider deleting disc_where
+The total number of missing observations is quite low (4%) so missing data should not be a huge problem
 
-I was trying to plot the distributions of the numeric variables to see which ones are highly skewed and require a transformation to normalize them. It's plotting the discrete variables too. I always have the doubt if discrete variables can de transformed, idk if its a good practice.
+Given the high percentage of missing values we delete `disc_where`. This variable was expected to have a high percentage of missingness as it is a question that applies only to people that have been subject to discrimination.
+
+The variable with the second highest number of missing data is `left_right`, given the importance of this variable it is probably worth to impute those values.
+
+Next there are the variables `trans_docs` and `gender_docs` which are respectively our target variable and a closely related variable
+
+Then there is `disc_contact` which will be deleted as well, given that it does not add meaningful information to our analysis
 
 ```{r}
+data <- data |> 
+  select(-c("disc_where", "disc_contact"))
+```
 
+
+## Exploratoy Data Analysis 
+
+Plotting the distribution of the numeric variables 
+
+```{r}
 library(e1071)
 
 # Identify numeric variables
@@ -834,23 +845,13 @@ for (var in numeric_vars) {
     cat("--> Consider applying a logarithmic transformation to", var, "\n")
   }
 }
-
 ```
 
-
-#Exploratoy Descriptive Analysis 
-
---> it's just a first approach. I organized it it 3 blocks (sociodemographic variables, relations with minorities and paradata), but feel free to suggest even deleting most part of it. I guess Marga want us to go straightfoward and don't do unuseful things. I didn't spend a lot of time to make the graphics pretty and it's probably not the best way to visualize them. It is a first attempt that can be improved as we decide.
-
-
-## Analysis of individual-level variables
+### Analysis of individual-level variables
 
 We must keep in mind our Target variable is qc19 "Do you think that transgender persons should be able to change their civil documents to match their inner gender identity?"
 
-(this graph could be redundant)
-
 ```{r}
-
 data_percent <- data |> 
   group_by(trans_docs) |> 
   summarise(count = n()) |> 
@@ -868,21 +869,17 @@ ggplot(data_percent, aes(x = trans_docs, y = percentage, fill = trans_docs)) +
   ) +
   theme_minimal() +
   theme(legend.position = "none")
-
 ```
 
 Taking a look to our variable of interest alone, we see how the 52.7% of our sample are in favor of trans people to change their gender in their civil documents. However, there is also a significant opposition (35,3%), and a 12% who answered "Don't know". We will try to explore this distribution along the variables we consider to be most important for our analysis.
 
---> When we turned DK into NAs for all the factor variables, we also changed it for qc19 (now trans_docs). Idk if for the EDA we want to keep that category as "na". 
+--> When we turned DK into NAs for all the factor variables, we also changed it for qc19 (now trans_docs). We should keep throughout our analysis in mind that NAs for qc19 are actually DK. Later we can code it as DK instead of NAs to have better graphs.
 
-### Sociodemographic variables
+#### Sociodemographic variables
 
---> Do we want to interpret significant relations of each combination of variables we are plotting? 
-
-#### Gender
+##### Gender
 
 ```{r}
-
 data_summary <- data |> 
   count(trans_docs, gender, name = "n") |> 
   group_by(gender) |>  
@@ -907,22 +904,13 @@ contingency_table <- table(data$gender, data$trans_docs)
 # Realizar la prueba de chi-cuadrado
 chisq_test <- chisq.test(contingency_table)
 print(chisq_test)
-
 ```
+
 Men exhibit a lower percentage of favorable or dk responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
 
+##### Age
 
-#### Age
 ```{r}
-
-ggplot(data, aes(x = trans_docs, y = age, fill = "blue")) +
-  geom_boxplot() +
-  theme_minimal() +
-  labs(title = "Support by age",
-       y = "Age",
-       x = "Support")+
-  theme(legend.position = "none")
-
 #ANOVA
 anova <- aov(age ~ trans_docs, data = data)
 summary(anova)
@@ -930,13 +918,12 @@ summary(anova)
 
 There are significant differences between the groups defined by trans_docs.
  
-#### Religiosity
+##### Religiosity
 We have two variables related to religiosity: religion (the religious affiliation professed by the respondent) and religious_minority (whether or not the respondent belongs to a religious minority group).
 
 For the first one it's better to show a cross table instead of a plot, since there are a lot of categories
 
 ```{r}
-
 CrossTable(data$religion, data$trans_docs,
            digits = 2, 
            expected = FALSE, 
@@ -944,7 +931,6 @@ CrossTable(data$religion, data$trans_docs,
            chisq = TRUE, 
            prop.chisq = FALSE, 
            format = "SPSS")
-
 ```
 
 Out of all observations Catholic, Atheists/Agnostic, Orthodox Christians and Protestants sum up to the 81.04% of our sample, being the rest underrepresented. I believe the warning "Chi-squared approximation may be incorrect" is because of this. Consequently I don't know if we can trust the p-value.
@@ -967,14 +953,11 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = religious_minori
     fill = "religious_minority"
   ) +
   theme_minimal()
-
-
 ```
 
-#### Ideology
+##### Ideology
 
 ```{r}
-
 data_summary <- data |> 
   count(trans_docs, left_right, name = "n") |> 
   group_by(left_right) |>  
@@ -1002,7 +985,7 @@ Non-responses are highest among those without ideological alignment.
 ```{r}
 
 # Number of friends belonging to a minority group
-ggplot(data, aes(x = trans_docs, y = friends_minorities, fill = trans_docs)) +
+ggplot(data, aes(x = trans_docs, y = n_friends_minorities, fill = trans_docs)) +
   geom_boxplot() +
   labs(
     title = "Support by number of friends of a minority group",
@@ -1164,99 +1147,14 @@ Respondents who engaged better in the survey were more likely to express support
 --> are we doing EDA for country level variables?
 
 
-# Identify key socio-demogrpahic variables
 
-From exploration of the codebook and dataframe:
+After that we can further discard some due to missingness, multicollinearity, irrelevance.
 
-*Target variable:* \* qc19 "Do you think that transgender persons should
-be able to change their civil documents to match their inner gender
-identity?"
+We need also to build the country level dataframe. Join all the country level data together.
 
-Survey ID variables: - studyno1 to survey vars, all to be removed.
-
-Respondent information -\> questions starting with "D" (D1-D77) -
-political views, living situation, gender, education, occupation,
-household characteristics, class
-
-Key socioeconomic variables:
-
--   d1 - political ideology, left to right
-
--   d10 - Gender
-
--   d11 - Age exact
-
-    -   Alternatives: d11r1 age recoded 4 cats, d11r2 age recoded 6
-        cats, d11r3 age recoded 7 cats
-
--   d8 - Education, how old were you when you stopped full time
-    education (Student = 00; No education = 01; refusal = 98; DK = 99
-
-    -   d8r1 -\> 11 category recode
-
-    -   d8r2 -\> 5 category recode s
-
--   d3 - religion
-
--   d25 - region lived in (1=rural, 2=small/medium town, 3=large town,
-    4=DK)
-
--   d70 - life satisfaction: - 1 = very satisfied, 2= fairly, 3=not
-    very, 4 = not at all, 5 = DK
-
--   D63 - class (working to higher, 1;5 then 6-9 no resp)
-
-Uncertain variables, marital status (d7) /hh arrangement (d40)
-/occupation (d15) / internet use (d60) Also the "sd" prefix variables..
-these are about contact with different groups of discriminated people?
-
-Paradata information -\> questions starting with "P" Paradata: -\>
-P1-P10, date, time, length of interview, people present during
-interview, respondent cooperation, location vars, interviewer number.
-
-Select and rename these key variables:
-
-```{r}
-individuals_df <- clean1 |>
-
-  #use select function and rename all the in scope variables
-  select(
-      isocntry,
-      # countryid,
-      # country_names,
+Then next steps would involve imputing NAs, building the country level dataframe and then we can start with correlation, discarding variables and modelling
 
 
-      target_var = qc19,
-
-    # socioeconomic variables for individuals
-      gender = d10,
-      age = d11,
-      age_4cat = d11r1,
-      age_6cat = d11r2,
-      age_7cat = d11r3,
-      polit_ideology = d1,
-      educ_5cat = d8r2, # all the education vars have low cutoffs
-      educ_11cat = d8r1,
-      lifesat = d70,
-      religion = sd3,
-      class = d63,
-      occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
-      financialstress = d60, #difficulty paying bills
-      polintr # no need to rename political interest var
-
-    # # paradata variables
-    #   int_date = p1,
-    #   int_time = p2,
-    #   int_length = p3r, #using recoded var instead of base p3
-    #   int_ppl_present = p4,
-    #   int_resp_coop = p5,
-    #   int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
-    #   #p7 not useful, location, no data for p8-11
-    # 
-    #   #p13 is language of interview. Probably not useful?
-      )
-
-```
 
 ## INITIAL TESTING: Classification models for each country
 
@@ -1268,33 +1166,101 @@ The toy data will be the individuals_df data from above, but joined on, will be 
 
 First, create a country level table for all the data of interest: 
 
-```{r}
-country_level_data <- codelist |> 
-  left_join(gdp_data, by = join_by(country.name.en == country)) |> 
-  left_join(rural_data, by = join_by(iso3c == country_code)) |> 
-  # left_join(marriage_data, by = join_by(country.name.en == Country)) |> # excluding the marriage data for now because it has multiple variables for the same country
-  left_join(democracy_index, by = join_by(iso3c == country_code)) |> 
-  left_join(gequality_index, by = join_by(country.name.en == country_name))
 
-country_level_testdata <- country_level_data |> 
-  select(iso2c, 
-         gdp_pc, 
-         #marriage_stat = Status, #rename
-         rural_pop_percentage, 
-         democracy_index, 
-         overall_gender_equality_index)
+```{r}
+id_vars <- c("studyno1", "studyno2", "doi", "version", "edition", "survey", "caseid", "uniqid", "serialid", "tnscntry", "country")
+# remove ID vars
+clean1 <- data |> 
+  select(-any_of(id_vars))
+
+#remove nationality variable (q1). Later, if we decide we need an immigration variable, we can impute national level data.  
+clean1 <- clean1 |> 
+  select(-any_of(starts_with("q1")))
+
+# remove generation variable, too similar to age
+clean1 <- clean1 |> 
+  select(-any_of(starts_with("gen")))
+
+# remove additional paradata
+# clean1 <- clean1 |> 
+#   select(-any_of(starts_with("p7", "p13")))
+
+```
+
+```{r}
+clean1 <- clean1 |> 
+  select(-any_of(starts_with(c("qa", "qb"))))
+```
+
+```{r}
+# individuals_df <- clean1 |>
+# 
+#   #use select function and rename all the in scope variables
+#   select(
+#       isocntry,
+#       # countryid,
+#       # country_names,
+# 
+# 
+#       target_var = qc19,
+# 
+#     # socioeconomic variables for individuals
+#       gender = d10,
+#       age = d11,
+#       age_4cat = d11r1,
+#       age_6cat = d11r2,
+#       age_7cat = d11r3,
+#       polit_ideology = d1,
+#       educ_5cat = d8r2, # all the education vars have low cutoffs
+#       educ_11cat = d8r1,
+#       lifesat = d70,
+#       religion = sd3,
+#       class = d63,
+#       occ_group_recode = d15a_r2, # the occupation vars are maybe not needed too
+#       financialstress = d60, #difficulty paying bills
+#       polintr # no need to rename political interest var
+# 
+#     # # paradata variables
+#     #   int_date = p1,
+#     #   int_time = p2,
+#     #   int_length = p3r, #using recoded var instead of base p3
+#     #   int_ppl_present = p4,
+#     #   int_resp_coop = p5,
+#     #   int_location = p6, # this may be a repeat of locality variable in survey. Useful maybe to consolidate data
+#     #   #p7 not useful, location, no data for p8-11
+#     # 
+#     #   #p13 is language of interview. Probably not useful?
+#       )
+
+```
+
+```{r}
+# country_level_data <- codelist |> 
+#   left_join(gdp_data, by = join_by(country.name.en == country)) |> 
+#   left_join(rural_data, by = join_by(iso3c == country_code)) |> 
+#   # left_join(marriage_data, by = join_by(country.name.en == Country)) |> # excluding the marriage data for now because it has multiple variables for the same country
+#   left_join(democracy_index, by = join_by(iso3c == country_code)) |> 
+#   left_join(gequality_index, by = join_by(country.name.en == country_name))
+# 
+# country_level_testdata <- country_level_data |> 
+#   select(iso2c, 
+#          gdp_pc, 
+#          #marriage_stat = Status, #rename
+#          rural_pop_percentage, 
+#          democracy_index, 
+#          overall_gender_equality_index)
 ```
 
 Now set our test data. for ease, we will remove the UK from the main data then join on all others (as UK has some NA obs for gender equality index + gdp to be amended)
 
 ```{r}
-
-complete_df <- individuals_df |> 
-  filter(isocntry != "GB") |> 
-  left_join(country_level_testdata, 
-            by = join_by(isocntry == iso2c)) |> 
-  filter(!is.na(target_var)) # remove NA for our target variable. 
-  
+# 
+# complete_df <- individuals_df |> 
+#   filter(isocntry != "GB") |> 
+#   left_join(country_level_testdata, 
+#             by = join_by(isocntry == iso2c)) |> 
+#   filter(!is.na(target_var)) # remove NA for our target variable. 
+#   
 ```
 
 We now have a table to test some glmer modelling on. 
@@ -1307,40 +1273,40 @@ https://raffaelevacca.github.io/Intro-multilevel-with-R/
 
 Testing a nested dataset by country
 ```{r}
-
-nested.cntry <- complete_df %>% 
-  group_by(isocntry) %>%
-  nest()
-
-# The column nested.df$data is a list of data frames, one for each country
-class(nested.cntry$data) # type, list
-length(nested.cntry$data) # number of countries
-
-# to unnest()
-nested.cntry %>%
-  filter(isocntry == "AT") %>%
-  dplyr::select(isocntry, data) %>%
-  unnest(cols = c(data))
-
+# 
+# nested.cntry <- complete_df %>% 
+#   group_by(isocntry) %>%
+#   nest()
+# 
+# # The column nested.df$data is a list of data frames, one for each country
+# class(nested.cntry$data) # type, list
+# length(nested.cntry$data) # number of countries
+# 
+# # to unnest()
+# nested.cntry %>%
+#   filter(isocntry == "AT") %>%
+#   dplyr::select(isocntry, data) %>%
+#   unnest(cols = c(data))
+# 
 
 ```
 
 Using the nested data, we now run a model for each country:
 
 ```{r}
-# fit separate lm for each each element of nested.cntry$data)
-lmodels <- nested.cntry %>%
-  # Get all school data frames
-  pull(data) %>%
-  # Run glm() on each via map because it's a classification model
-    # model run against all vairables for now. 
-  purrr::map(~ glm(target_var ~ ., 
-                   data= .x,
-                   family = "binomial"))
-
-# show that it's a list and we can call each elements regression output. 
-class(lmodels)
-lmodels[4]
+# # fit separate lm for each each element of nested.cntry$data)
+# lmodels <- nested.cntry %>%
+#   # Get all school data frames
+#   pull(data) %>%
+#   # Run glm() on each via map because it's a classification model
+#     # model run against all vairables for now. 
+#   purrr::map(~ glm(target_var ~ ., 
+#                    data= .x,
+#                    family = "binomial"))
+# 
+# # show that it's a list and we can call each elements regression output. 
+# class(lmodels)
+# lmodels[4]
 ```
 
 
@@ -1394,12 +1360,12 @@ Each step, check whether your model is significantly improved compared to the pr
 
 First, null model:
 ```{r}
-m_null <- glmer(target_var ~ (1|isocntry),
-               data = complete_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
-summary(m_null)
+# m_null <- glmer(target_var ~ (1|isocntry),
+#                data = complete_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+# summary(m_null)
 ```
 
 To come back and reinterpret... don't really know at this stage.
@@ -1407,21 +1373,21 @@ To come back and reinterpret... don't really know at this stage.
 Test flexplot and broom.mixed usage: 
 
 ```{r}
-#devtools::install_github("dustinfife/flexplot")
-library(flexplot)
+# #devtools::install_github("dustinfife/flexplot")
+# library(flexplot)
 ```
 
 Here it has some examples of code and output for saved logistic model fits
 
 ```{r}
-# don't think flexplot will be super useful as we have so many categorical variables
-flexplot::logistic_fit
-flexplot::mixed_logistic
-flexplot::visualize(m_null)
-
-# broom.mixed is used to tidy up the stats outputs into a tibble
-broom.mixed::tidy(m_null) # summary output in tibble
-broom.mixed::glance(m_null) # model performance summary
+# # don't think flexplot will be super useful as we have so many categorical variables
+# flexplot::logistic_fit
+# flexplot::mixed_logistic
+# flexplot::visualize(m_null)
+# 
+# # broom.mixed is used to tidy up the stats outputs into a tibble
+# broom.mixed::tidy(m_null) # summary output in tibble
+# broom.mixed::glance(m_null) # model performance summary
 
 ```
 
@@ -1430,24 +1396,24 @@ Random effects model
 - Including individual level variables only with country: 
 
 ```{r}
-n_randeffect <- glmer(target_var ~ 
-                        gender + age + I(age^2) + lifesat + religion + class + 
-                        (1|isocntry),
-               data = complete_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
+# n_randeffect <- glmer(target_var ~ 
+#                         gender + age + I(age^2) + lifesat + religion + class + 
+#                         (1|isocntry),
+#                data = complete_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
 ```
 This suggests the data needs to be rescaled, to check which variables are the issue:
 ```{r}
-library(caret)
-# check for nearzero variance, if so those could be removed
-nearZeroVar(complete_df, saveMetrics = TRUE)
-# see no issues. So all variables stay.
-
-# will recode the numeric variables I selected, which is only age
-scaled_df <- complete_df |> 
-  mutate(across(where(is.numeric), scale))
+# library(caret)
+# # check for nearzero variance, if so those could be removed
+# nearZeroVar(complete_df, saveMetrics = TRUE)
+# # see no issues. So all variables stay.
+# 
+# # will recode the numeric variables I selected, which is only age
+# scaled_df <- complete_df |> 
+#   mutate(across(where(is.numeric), scale))
 
 ```
 
@@ -1464,16 +1430,16 @@ Re check the random effects model with scaled data:
 
 ## this took a long time to try run so removed variables. The nAGQ also adds time but fine for now
 
-n_randeffect <- glmer(target_var ~ 
-                        gender + age + I(age^2) + lifesat + (1|isocntry),
-               data = scaled_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
-
-
-
-summary(n_randeffect)
+# n_randeffect <- glmer(target_var ~ 
+#                         gender + age + I(age^2) + lifesat + (1|isocntry),
+#                data = scaled_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+# 
+# 
+# 
+# summary(n_randeffect)
 ```
 
 Can we interpret this...
@@ -1522,78 +1488,7 @@ think the section below is probably redundant now but just leaving until I check
 
 --------------------------------------------------------------------
 
-## Remove unwanted variables
 
-The approach above may be best.. but I did start this first by deleting
-variables by process of elimination. Maybe good to justify some
-decisions, but I'm not sure it matters either way.
-
--   we do need to decide on some of the attitudinal questions if they
-    are relevant enough to include. I haven't looked at all enough in
-    detail.
-
-Variable groups I suggest removing: - gen1:gen6 -\> generation
-variables, offer no more info than age - nationality variables -\> would
-be easier and more accurate to join an overall % of immigration variable
-if we want this data. - d71, -\> the three variables are summarised in
-the `polintr` variable.
-
-```{r}
-id_vars <- c("studyno1", "studyno2", "doi", "version", "edition", "survey", "caseid", "uniqid", "serialid", "tnscntry", "country")
-# remove ID vars
-clean1 <- data |> 
-  select(-any_of(id_vars))
-
-#remove nationality variable (q1). Later, if we decide we need an immigration variable, we can impute national level data.  
-clean1 <- clean1 |> 
-  select(-any_of(starts_with("q1")))
-
-# remove generation variable, too similar to age
-clean1 <- clean1 |> 
-  select(-any_of(starts_with("gen")))
-
-# remove additional paradata
-# clean1 <- clean1 |> 
-#   select(-any_of(starts_with("p7", "p13")))
-
-```
-
-To discuss re: cleaning. But I think also remove all these - qa set
-(from qa1 to qa20) \* on trade, globalisation, eu business
-
--   qb set (from qb1 to qb9) \* on energy policy and EU priorities
-
-Do we delete all these or are we expected to do some sort of
-unsupervised learning or similar to consider their attitudes? I think
-not.. There is questions about priority for business
-
-Checking how many more variables it removes. It would be 159 removed.
-
-```{r}
-data_raw |> 
-  select(any_of(starts_with(c("qa", "qb")))) |> 
-  ncol()
-```
-
-Removing from my test data, this still has 409 variables though.
-
-```{r}
-clean1 <- clean1 |> 
-  select(-any_of(starts_with(c("qa", "qb"))))
-
-```
-
-## Clean respondents personal data
-
-I think some recoding or factorising may be necessary.
-
-Note: There are lots of haven labelled columns.. it would be quite easy
-to write a function to extract the label names to a new column? This
-could be easier for when we want to investigate new variables?
-
-```{r}
-
-```
 
 ### Impute actual NA values
 
@@ -1608,13 +1503,13 @@ d8r2 -\> 5 category recode
 Clean the
 
 ```{r}
-table(data_raw$d8, data_raw$d8r2)
-
-# First, recode the d8 values that are given as NA or student/no education
-clean1 |> 
-  mutate(educ = if_else(d8 %in% c(0, 1, 98, 99), NA, d8))
-
-# if d8 = 0, they are a current student. 
+# table(data_raw$d8, data_raw$d8r2)
+# 
+# # First, recode the d8 values that are given as NA or student/no education
+# clean1 |> 
+#   mutate(educ = if_else(d8 %in% c(0, 1, 98, 99), NA, d8))
+# 
+# # if d8 = 0, they are a current student. 
 
 ```
 
