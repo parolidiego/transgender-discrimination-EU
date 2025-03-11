@@ -50,6 +50,7 @@ data_raw <- read_dta("ZA7575.dta")
 ## Country-level data
 
 This is for joins:
+
 ```{r}
 # building a df with country names and codes for the EU-28
 codelist <- countrycode::codelist |> 
@@ -57,9 +58,11 @@ codelist <- countrycode::codelist |>
   filter(!is.na(eu28)) 
 ```
 
-### GDP per capita, PPP (constant 2021 international $)
+### GDP per capita, PPP (constant 2021 international \$)
 
-Retrieved from the World Bank (<https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD>) for the year 2019.
+Retrieved from the World Bank
+(<https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD>) for the year
+2019.
 
 ```{r}
 gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4)
@@ -137,7 +140,8 @@ marriage_data <- marriage_data |>
 str(marriage_data)
 ```
 
-This variable could be recoded as either ordinal, categorical (both factor) or logical.
+This variable could be recoded as either ordinal, categorical (both
+factor) or logical.
 
 The dataset has 32 observations instead of 28 (EU-28 countries).
 
@@ -156,13 +160,18 @@ constitutional ban on marriage and still have legally recognized civil
 unions. Thus maybe we should exclude this level from this variable as it
 is not exclusive. The lowest level would remain no recognition.
 
-Irene: I guess we need to decide whether we think it is more important/representative of a country to have civil unions for same-sex couples or a constitutional ban on same-sex marriage (this feels pretty strong tbh). It depends also on how we want to recode this.
+Irene: I guess we need to decide whether we think it is more
+important/representative of a country to have civil unions for same-sex
+couples or a constitutional ban on same-sex marriage (this feels pretty
+strong tbh). It depends also on how we want to recode this.
 
 <br>
 
-The table is up to date, so I had to check (on Wikipedia honestly) what year each of those items was actually legalized and I got to this:
+The table is up to date, so I had to check (on Wikipedia honestly) what
+year each of those items was actually legalized and I got to this:
 
------------------------------same sex marriage-----------------------------
+-----------------------------same sex
+marriage-----------------------------
 
 Greece: civil unions since 2015, marriage since 2024
 
@@ -170,11 +179,14 @@ Estonia: civil unions since 2016, marriage since 2024
 
 Slovenia: civil unions since 2017, marriage since 2022
 
-United Kingdom: marriage since 2014 in England, Scotland and Wales, and since 2020 in Northern Ireland. Civil unions since 2005
+United Kingdom: marriage since 2014 in England, Scotland and Wales, and
+since 2020 in Northern Ireland. Civil unions since 2005
 
----------------------------------civil unions-----------------------------------
+---------------------------------civil
+unions-----------------------------------
 
-Latvia: civil unions since 2024, the Constitution prohibits the recognition of same sex marriage since 2006.
+Latvia: civil unions since 2024, the Constitution prohibits the
+recognition of same sex marriage since 2006.
 
 ```{r}
 marriage_data <- marriage_data |> 
@@ -191,7 +203,11 @@ marriage_data <- marriage_data |>
 marriage_data |> filter(Country %in% c("Latvia", "Greece", "Estonia", "Slovenia", "United Kingdom"))
 ```
 
-I also found this LGBT rights index on Our World in Data (<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures whether LGBT+ people enjoy the same rights as cisgender people combining information on 18 different policies. It includes the legal status of same-sex marriage so we might keep only one of these.
+I also found this LGBT rights index on Our World in Data
+(<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures
+whether LGBT+ people enjoy the same rights as cisgender people combining
+information on 18 different policies. It includes the legal status of
+same-sex marriage so we might keep only one of these.
 
 ```{r}
 lgbt_rights_index <- read.csv("lgbt-rights-index.csv")
@@ -203,7 +219,9 @@ lgbt_rights_index <- lgbt_rights_index |>
 
 str(lgbt_rights_index)
 ```
+
 Column names can be renamed:
+
 ```{r}
 lgbt_rights_index <- lgbt_rights_index |> 
   rename(country_name = Entity,
@@ -213,7 +231,10 @@ lgbt_rights_index <- lgbt_rights_index |>
 
 ### Gender inequality index
 
-Gender Development and Gender Inequality indexes, developed by the United Nations Development. Retrieved from <https://hdr.undp.org/data-center/documentation-and-downloads> for the year 2019.
+Gender Development and Gender Inequality indexes, developed by the
+United Nations Development. Retrieved from
+<https://hdr.undp.org/data-center/documentation-and-downloads> for the
+year 2019.
 
 ```{r}
 gender_index <- read_xlsx("UNDP_gender_indexes.xlsx")
@@ -228,10 +249,12 @@ gender_index |>
 
 str(gender_index)
 ```
+
 We checked that we have indeed 28 distinct countries in the dataset.
 
-This dataset collects many indicators apart from the indexes values. 
-We are selecting only the Gender Development and Gender Inequality indexes (GDI and GII):
+This dataset collects many indicators apart from the indexes values. We
+are selecting only the Gender Development and Gender Inequality indexes
+(GDI and GII):
 
 ```{r}
 gender_index <- gender_index |> 
@@ -242,7 +265,8 @@ gender_index <- gender_index |>
 colnames(gender_index) <- janitor::make_clean_names(colnames(gender_index)) # cleaning spaces and upper cases
 ```
 
-And then exploring them to see which one is a better fit for modeling and predictions:
+And then exploring them to see which one is a better fit for modeling
+and predictions:
 
 ```{r}
 summary(gender_index$gender_inequality_index)
@@ -251,23 +275,29 @@ summary(gender_index$gender_development_index)
 sd(gender_index$gender_inequality_index)
 sd(gender_index$gender_development_index)
 ```
-We observe that the second one (Gender Development Index) has a very small range,
-indicating that most countries have nearly identical scores. This is supported by
-the standard deviation, which shows that the GII is more spread out than the GDI. 
-Being almost constant, GDI won’t add much value to the analysis. This is likely due
-to the fact that these indexes are created by the United Nations Development Programme 
-for all countries, so it may not capture the finer differences between EU countries.
+
+We observe that the second one (Gender Development Index) has a very
+small range, indicating that most countries have nearly identical
+scores. This is supported by the standard deviation, which shows that
+the GII is more spread out than the GDI. Being almost constant, GDI
+won’t add much value to the analysis. This is likely due to the fact
+that these indexes are created by the United Nations Development
+Programme for all countries, so it may not capture the finer differences
+between EU countries.
 
 ```{r}
 cor(gender_index$gender_inequality_index, 
     gender_index$gender_development_index, 
     use = "complete.obs")
 ```
-Surprisingly, the two indexes have a very weak positive correlation. While they are
-not inverse, I was expecting them to measure opposite things, so maybe the correlation
-coefficient is not useful here because of the low variation of both variables (specially
-GDI).
-I don't know what else to do with this info other than keeping GII and discarding GDI.
+
+Surprisingly, the two indexes have a very weak positive correlation.
+While they are not inverse, I was expecting them to measure opposite
+things, so maybe the correlation coefficient is not useful here because
+of the low variation of both variables (specially GDI). I don't know
+what else to do with this info other than keeping GII and discarding
+GDI.
+
 ```{r}
 gender_index <- gender_index |> 
   select(-gender_development_index)
@@ -298,13 +328,13 @@ democracy_index <- democracy_index |>
 
 str(democracy_index)
 ```
-In this case, we are only keeping the 
+
+In this case, we are only keeping the
 
 ```{r}
 democracy_index <- democracy_index |> 
   select(country_name, country_code, democracy_index)
 ```
-
 
 # Data cleaning
 
@@ -641,7 +671,8 @@ non_factor_variables <- c("serialid", "tnscntry", "isocntry", "d11", "q1_29",
 factor_variables <- setdiff(names(data), non_factor_variables)
 ```
 
-Correctly encoding the factor variables that do not need any further cleaning
+Correctly encoding the factor variables that do not need any further
+cleaning
 
 ```{r}
 # Converting them to factors and assign them their labels automatically
@@ -673,7 +704,8 @@ data <- data |>
   select(-q1_29)
 ```
 
-Dealing with the other variables on which we do some further pre-processing (feature engineering)
+Dealing with the other variables on which we do some further
+pre-processing (feature engineering)
 
 ```{r}
 # Creating a variable that counts the number of different minority groups a person has acquaintances with
@@ -746,7 +778,8 @@ data <- data |>
 
 This should be our final selection of variables.
 
-We still need to rename them appropriately and check that all the NAs are correctly encoded by looking at the summary.
+We still need to rename them appropriately and check that all the NAs
+are correctly encoded by looking at the summary.
 
 Rename columns appropriately and move them around to order the dataframe
 
@@ -779,7 +812,11 @@ data <- data |>
   ) 
 ```
 
-Now, we will transform the variable disc, which was originally coded in a negative way (1 = "Not mentioned", 2 = "No, you haven’t been discriminated against"), into a positive dummy variable to make its interpretation more straightforward. The variable is 1 if a person has been subject to discrimination
+Now, we will transform the variable disc, which was originally coded in
+a negative way (1 = "Not mentioned", 2 = "No, you haven’t been
+discriminated against"), into a positive dummy variable to make its
+interpretation more straightforward. The variable is 1 if a person has
+been subject to discrimination
 
 ```{r}
 data <- data |> 
@@ -837,19 +874,24 @@ Our dataset seems quite balanced across the different countries
 data |> count(country)
 ```
 
-Although some levels of occupation have more observations than others, we have enough observations for each level so we do not need to aggregate over different levels for the variable `occupation`
+Although some levels of occupation have more observations than others,
+we have enough observations for each level so we do not need to
+aggregate over different levels for the variable `occupation`
 
 ```{r}
 data |> count(occupation)
 ```
 
-Very few people declare themselves to be the higher class of society, nonetheless we keep this level because it makes sense
+Very few people declare themselves to be the higher class of society,
+nonetheless we keep this level because it makes sense
 
 ```{r}
 data |> count(social_class)
 ```
 
-Given the low number of observations in some categories and the high number of categories we opt to aggregate some of them, otherwise we risk too much noise in our models.
+Given the low number of observations in some categories and the high
+number of categories we opt to aggregate some of them, otherwise we risk
+too much noise in our models.
 
 ```{r}
 data |> count(religion)
@@ -871,10 +913,12 @@ data <- data |>
 data |> count(religion)
 ```
 
-
 ### Missing values
 
-Now we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude friends_trans because that category could be worth analyzing. 
+Now we will substitute de "Refusal" answers in the remaining variables
+as NAs. If the respondent refuses to answer it's equivalent to not
+knowing his or her answer. We exclude friends_trans because that
+category could be worth analyzing.
 
 ```{r}
 factor_variables <- names(data)[sapply(data, is.factor)]
@@ -912,15 +956,23 @@ plot_intro(data)
 plot_missing(data)
 ```
 
-The total number of missing observations is quite low (4%) so missing data should not be a huge problem
+The total number of missing observations is quite low (4%) so missing
+data should not be a huge problem
 
-Given the high percentage of missing values we delete `disc_where`. This variable was expected to have a high percentage of missingness as it is a question that applies only to people that have been subject to discrimination.
+Given the high percentage of missing values we delete `disc_where`. This
+variable was expected to have a high percentage of missingness as it is
+a question that applies only to people that have been subject to
+discrimination.
 
-The variable with the second highest number of missing data is `left_right`, given the importance of this variable it is probably worth to impute those values.
+The variable with the second highest number of missing data is
+`left_right`, given the importance of this variable it is probably worth
+to impute those values.
 
-Next there are the variables `trans_docs` and `gender_docs` which are respectively our target variable and a closely related variable
+Next there are the variables `trans_docs` and `gender_docs` which are
+respectively our target variable and a closely related variable
 
-Then there is `disc_contact` which will be deleted as well, given that it does not add meaningful information to our analysis
+Then there is `disc_contact` which will be deleted as well, given that
+it does not add meaningful information to our analysis
 
 ```{r}
 data <- data |> 
@@ -941,9 +993,12 @@ country_level_data <- codelist |>
 str(country_level_data)
 ```
 
-I thought by aggregating we meant synthesizing the information from the individual respondents into country-level variables? but I don't know if this is something that models do directly.
+I thought by aggregating we meant synthesizing the information from the
+individual respondents into country-level variables? but I don't know if
+this is something that models do directly.
 
 My approach was using means for numeric variables:
+
 ```{r}
 names(select(data, where(is.numeric)))
 
@@ -954,6 +1009,7 @@ data_num <- data %>%
 ```
 
 As well as for dummies:
+
 ```{r}
 # searching for factor variables with two levels
 dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
@@ -974,7 +1030,8 @@ data_dummy <- data %>%
                 .names = "{.col}_num"))
 ```
 
-I converted factors with 2 levels to numerical 0-1 so we can compute their means.
+I converted factors with 2 levels to numerical 0-1 so we can compute
+their means.
 
 ```{r}
 data_dummy <- data_dummy %>%
@@ -987,16 +1044,20 @@ data_dummy <- data_dummy %>%
 ```
 
 Now we can join the two datasets:
+
 ```{r}
 data_aggr <- data_num %>%
   left_join(data_dummy, by = "country")
 ```
 
-The next variables are not numeric nor factor with 2 levels, so they are not included in data_aggr:
+The next variables are not numeric nor factor with 2 levels, so they are
+not included in data_aggr:
+
 ```{r}
 names(data)[!sapply(data, is.numeric) &
               !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
 ```
+
 ///////
 
 Not using paradata for now. We can discuss how to use it
@@ -1010,9 +1071,9 @@ complete_df <- data |>
 str(complete_df)
 ```
 
-# Exploratory Data Analysis 
+# Exploratory Data Analysis
 
-Plotting the distribution of the numeric variables 
+Plotting the distribution of the numeric variables
 
 ```{r}
 library(e1071)
@@ -1040,7 +1101,9 @@ for (var in numeric_vars) {
 
 ## Analysis of individual-level variables
 
-We must keep in mind our Target variable is qc19 "Do you think that transgender persons should be able to change their civil documents to match their inner gender identity?"
+We must keep in mind our Target variable is qc19 "Do you think that
+transgender persons should be able to change their civil documents to
+match their inner gender identity?"
 
 ```{r}
 data_percent <- data |> 
@@ -1062,9 +1125,17 @@ ggplot(data_percent, aes(x = trans_docs, y = percentage, fill = trans_docs)) +
   theme(legend.position = "none")
 ```
 
-Taking a look to our variable of interest alone, we see how the 52.7% of our sample are in favor of trans people to change their gender in their civil documents. However, there is also a significant opposition (35,3%), and a 12% who answered "Don't know". We will try to explore this distribution along the variables we consider to be most important for our analysis.
+Taking a look to our variable of interest alone, we see how the 52.7% of
+our sample are in favor of trans people to change their gender in their
+civil documents. However, there is also a significant opposition
+(35,3%), and a 12% who answered "Don't know". We will try to explore
+this distribution along the variables we consider to be most important
+for our analysis.
 
---> When we turned DK into NAs for all the factor variables, we also changed it for qc19 (now trans_docs). We should keep throughout our analysis in mind that NAs for qc19 are actually DK. Later we can code it as DK instead of NAs to have better graphs.
+--\> When we turned DK into NAs for all the factor variables, we also
+changed it for qc19 (now trans_docs). We should keep throughout our
+analysis in mind that NAs for qc19 are actually DK. Later we can code it
+as DK instead of NAs to have better graphs.
 
 ### Sociodemographic variables
 
@@ -1097,7 +1168,10 @@ chisq_test <- chisq.test(contingency_table)
 print(chisq_test)
 ```
 
-Men exhibit a lower percentage of favorable or dk responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
+Men exhibit a lower percentage of favorable or dk responses and a higher
+rate of rejection compared to women. There is a statistically
+significant association between gender and our target variable, being
+women more supportive
 
 #### Age
 
@@ -1107,12 +1181,17 @@ anova <- aov(age ~ trans_docs, data = data)
 summary(anova)
 ```
 
-There are significant differences between the groups defined by trans_docs.
- 
-#### Religiosity
-We have two variables related to religiosity: religion (the religious affiliation professed by the respondent) and religious_minority (whether or not the respondent belongs to a religious minority group).
+There are significant differences between the groups defined by
+trans_docs.
 
-For the first one it's better to show a cross table instead of a plot, since there are a lot of categories
+#### Religiosity
+
+We have two variables related to religiosity: religion (the religious
+affiliation professed by the respondent) and religious_minority (whether
+or not the respondent belongs to a religious minority group).
+
+For the first one it's better to show a cross table instead of a plot,
+since there are a lot of categories
 
 ```{r}
 CrossTable(data$religion, data$trans_docs,
@@ -1124,7 +1203,11 @@ CrossTable(data$religion, data$trans_docs,
            format = "SPSS")
 ```
 
-Out of all observations Catholic, Atheists/Agnostic, Orthodox Christians and Protestants sum up to the 81.04% of our sample, being the rest underrepresented. I believe the warning "Chi-squared approximation may be incorrect" is because of this. Consequently I don't know if we can trust the p-value.
+Out of all observations Catholic, Atheists/Agnostic, Orthodox Christians
+and Protestants sum up to the 81.04% of our sample, being the rest
+underrepresented. I believe the warning "Chi-squared approximation may
+be incorrect" is because of this. Consequently I don't know if we can
+trust the p-value.
 
 ```{r}
 data_summary <- data |> 
@@ -1168,9 +1251,9 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = left_right)) +
   theme_minimal()
 ```
 
-Stronger left-wing support for trans rights. Right-wing respondents are the most 
-divided, with high opposition levels.
-Non-responses are highest among those without ideological alignment.
+Stronger left-wing support for trans rights. Right-wing respondents are
+the most divided, with high opposition levels. Non-responses are highest
+among those without ideological alignment.
 
 #### Social class
 
@@ -1194,9 +1277,11 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = social_class)) +
   ) +
   theme_minimal()
 ```
-Although D63 of the questionnaire measures (oneself's and one's household's) self-perceived
-social class, it is still a relevant and seemingly divisive variable. We observe a positive 
-correlation, where support grows with increasing (perceived) social class, while explicit 
+
+Although D63 of the questionnaire measures (oneself's and one's
+household's) self-perceived social class, it is still a relevant and
+seemingly divisive variable. We observe a positive correlation, where
+support grows with increasing (perceived) social class, while explicit
 lack of support and no response are higher for lower-class individuals.
 
 #### Education
@@ -1207,8 +1292,8 @@ ggplot(data, aes(x = trans_docs, y = years_edu)) +
   labs(x = "Support for trans people changing their civil documents", y = "Age when stopped full-time education") +
   ggtitle("Distribution of support by education")
 ```
-COMMENT
-Support doesn't seem to be related to education.
+
+COMMENT Support doesn't seem to be related to education.
 
 #### Area of residence
 
@@ -1231,8 +1316,8 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = community)) +
   ) +
   theme_minimal()
 ```
-COMMENT
-Support does not vary much by area of residence.
+
+COMMENT Support does not vary much by area of residence.
 
 ### Having trans friends
 
@@ -1257,13 +1342,15 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = friends_trans)) 
 
 ```
 
-Having trans friends is associated with a higher support, while those who refuse
-to disclose their connections to trans people tend to oppose more. 
+Having trans friends is associated with a higher support, while those
+who refuse to disclose their connections to trans people tend to oppose
+more.
 
 ## Country-level data
 
-Replication of the plot in Marga's document. This is probably not needed in the
-final version of the document.
+Replication of the plot in Marga's document. This is probably not needed
+in the final version of the document.
+
 ```{r}
 country_support <- data %>%
   mutate(
@@ -1306,8 +1393,9 @@ ggplot(country_support, aes(x = factor(country, levels = country_support %>%
         panel.grid.major.y = element_blank(),
         legend.position = "bottom")
 ```
-There are some mismatches, I guess the data might have become distorted at some
-point during processing, but I don't know when.
+
+There are some mismatches, I guess the data might have become distorted
+at some point during processing, but I don't know when.
 
 ```{r}
 trans_docs_prop <- country_support %>%
@@ -1333,12 +1421,14 @@ ggplot(country_long, aes(x = value, y = trans_support)) +
   theme_minimal()
 ```
 
-Democracy and LGBT Policy indeces seem to have a positive linear relationship with
-the target variable, while Gender Inequality index has a negative linear relationship.
-The relationship with GDP per capita is non-linear (logarithmic?). There appears to
-be a "ceiling" of support, beyond which increases in GDP per capita lose effect.
+Democracy and LGBT Policy indeces seem to have a positive linear
+relationship with the target variable, while Gender Inequality index has
+a negative linear relationship. The relationship with GDP per capita is
+non-linear (logarithmic?). There appears to be a "ceiling" of support,
+beyond which increases in GDP per capita lose effect.
 
 Boxplots for country-level variables:
+
 ```{r}
 ggplot(country_long, aes(y = value, x = variable)) +
   geom_boxplot(outlier.color = "red", outlier.shape = 16, fill = "lightblue") +
@@ -1349,7 +1439,9 @@ ggplot(country_long, aes(y = value, x = variable)) +
   theme(axis.text.y = element_blank(),  
         axis.ticks.x = element_blank())
 ```
+
 Histograms of scaled country data:
+
 ```{r}
 # scaled_data <- country_level_data %>%
 #   select(-iso3c, -iso2c, -country) %>%
@@ -1405,7 +1497,7 @@ paradata <- paradata %>%
 merged_paradata <- merge(data, paradata, by = "serialid", all.x = TRUE)
 ```
 
-Number of persons present during interview: 
+Number of persons present during interview:
 
 ```{r}
 library(gmodels)
@@ -1426,9 +1518,12 @@ CrossTable(merged_paradata$p4, merged_paradata$trans_docs,
 
 ```
 
-The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents
+The table shows a significant association between the number of people
+present during the interview and support for transgender people to
+change their documents
 
-Regarding the duration of the interview we have 2 options p3 and p3r. We will use p3r to have a simpler analysis
+Regarding the duration of the interview we have 2 options p3 and p3r. We
+will use p3r to have a simpler analysis
 
 ```{r}
 # CrossTable
@@ -1473,7 +1568,8 @@ plot_data <- merged_paradata %>%
 
 ```
 
-Respondents who engaged better in the survey were more likely to express support.
+Respondents who engaged better in the survey were more likely to express
+support.
 
 # Correlation and multicollinearity?
 
@@ -1483,35 +1579,392 @@ Can we do anyhting about this?
 
 Some words about class imbalance? Needed?
 
+# Analysis of missing values.
+
+Here we analyse the NA reponses to our target variable. This is a sort
+of robustness check to understand our data and learn if there are
+patterns in NA response that we should be worried about e.g. if there
+are specific demographics of people are less likely to respond.
+
+Overall the analysis below shows that non response is similar to the
+descriptive data and aligned with some groups reported "No" to
+supporting trans_docs in c19. So we're more at risk of underreporting
+"no" votes in this survey due to non-response. The correlation is low
+though so it's not a major concern.
+
+## Who is more likely to not respond to our target? 
+
+There are 3,280 NA responses to the target variable. To try understand
+if the missing values are at random, we will test the correlation
+between NA response and Use the DK (don't know) for our target variable.
+
+In the descriptive analysis above, we have already seen in raw terms
+that NA responses were more frequent from some groups e.g.
+
+-   women,
+
+-   older people,
+
+-   people who also responded NA for political ideology,
+
+-   People who do not have trans friends and those who refused to
+    respond to the friendship question had higher NA responses to the
+    target variable.
+
+-   People with lower survey cooperation
+
+-   By country, we already understand from the challenge description
+    that the NA responses vary. This is a significant disparity.
+
+Create a binary variable for the DK
+
+```{r}
+cntry_name <- codelist |> select(iso2c, country_name = country.name.en)
+dk_target <- data |> 
+  mutate(target_NA = ifelse(is.na(trans_docs), 1, 0)) |> 
+  left_join(cntry_name, by = join_by(country == iso2c)) |> 
+  dplyr::select(-trans_docs, -serialid, -country)
+
+table(dk_target$target_NA)
+```
+
+Confirm DK rates by country. They vary from 1.4% in Belgium to 28.5% in
+Bulgaria. Overall, the average is 11.95%.
+
+```{r}
+dk_target |> 
+  group_by(country_name) |> 
+  summarise(count_na = sum(target_NA),
+            num_resp = length(country_name),
+            pct_na = count_na/num_resp*100) |> 
+  ggplot(aes(x=reorder(country_name, -pct_na), y = pct_na))+
+  geom_col()+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+  labs(y = "Proportion of NA responses")
+
+```
+
+If all NA responses to the target are removed, this is how much the
+"Yes" count increases for each of our countries. We see this is not
+proportional. This is a statistical phenomenon. distribution of the
+variable looks by country. The NA vote removal, makes our differences in
+Yes/No differences appear larger.
+
+```{r}
+
+data |> 
+  group_by(country) |> 
+  summarise(yes_count = sum(trans_docs == "Yes", na.rm=TRUE),
+            num_resp = sum(!is.na(trans_docs)),
+            num_na = sum(is.na(trans_docs)),
+            pct_yes_withna = yes_count / length(country)*100,
+            pct_yes = yes_count/num_resp*100)|> 
+  ggplot(aes(x = reorder(country, -pct_yes))) +
+  geom_col(aes(y = pct_yes), fill = "red") + # First bar (pct_yes)
+  geom_col(aes(y = pct_yes_withna), fill = "yellow", alpha = 0.5) + # Second bar (pct_yes_withna)
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.title.x = element_blank()) +
+  scale_y_continuous(labels = scales::percent_format(scale = 1),
+                     limits = c(0,100)) + 
+  labs(title ="Support for transgender rights to legally change documents, with and without NA's")
+
+
+```
+
+### Check correlation with DK of target
+
+Run model to test what is correlated with DK response, use Cramers V for
+association between the factor variables and correlation for the numeric
+variables in the cleaned data.
+
+1.  Model the data for DK responses against the factor variables.
+
+```{r}
+factor_subset <- dk_target %>%
+  dplyr::select(target_NA, where(is.factor)) |> 
+  mutate(target_NA = factor(target_NA))
+
+### Run cramers V for factors
+library(DescTools)
+
+target_var <- "target_NA"
+factor_variables <- names(factor_subset)
+factor_variables <- factor_variables[factor_variables != target_var]
+
+cramers_v_results <- list()
+
+for (variable in factor_variables) {
+    contingency_table <- table(factor_subset[[target_var]], 
+                               factor_subset[[variable]])
+    cramers_v <- CramerV(contingency_table)
+    cramers_v_results[[variable]] <- cramers_v
+}
+
+# Create a Tibble for Results
+cat_results <- tibble(variable = names(cramers_v_results),
+       cramers_v = unlist(cramers_v_results)) |> 
+  arrange(desc(cramers_v))
+cat_results
+
+```
+
+This shows all of the factors have quite low association with the NA
+responses. The highest being internet use. This is a good sign that the
+missing values are random.
+
+2.  Look at the numeric variables and test correlations:
+
+```{r}
+numeric_subset <- dk_target %>%
+  dplyr::select(target_NA, where(is.numeric)) 
+
+target_var <- "target_NA"
+numeric_variables <- names(numeric_subset)[names(numeric_subset) != target_var]
+
+cor_results <- list()
+
+for (variable in numeric_variables) {
+    correlation <- cor(numeric_subset$target_NA, 
+                       numeric_subset[[variable]],
+                       use = "pairwise.complete.obs")
+    cor_results[[variable]] <- correlation
+}
+
+# Create a Tibble for Results
+cor_results <- tibble(variable = names(cor_results),
+       cor = unlist(cor_results)) |> 
+  arrange(cor)
+cor_results
+
+```
+
+Again, this is not too much cause for concern. We only have around 10%
+correlations, positive and negative with the target variable.
+
+### Modelling relationship with key variables and non-response
+
+Here we run a logistic regression to test for the most
+important/significant variables. First, we make a subset of data with
+only our variables that were most correlated in the seciton above (use
+above +/- 9.5% correlation and above 10% cramers V) and also include
+gender and country.
+
+```{r}
+
+cor_results |> filter(cor > 0.09 | cor < -0.9) |> pull(variable)
+cat_results |> filter(cramers_v >0.1) |> pull(variable)
+
+```
+
+Now model with those variables to see if they are significant in
+explaining the DK values. Gender will also be included as a key
+variable.
+
+We run a stepwise AIC on these most correlated variables and then use
+the best model to test the overall model fit.
+
+```{r}
+# first, run stepwise to determine most important 
+# run base model 
+dk_fit_null <- glm(target_NA ~ 1,
+              data = dk_target, 
+              family = "binomial")
+# run full fit model of most correlated vars with country (also age^2 for good practice)
+dk_fit <- glm(target_NA ~ lgb_discri + gender + age + I(age*age) + antilgbtq_rights + internet_use + social_class + country_name, 
+              data = dk_target, 
+              family = "binomial")
+
+# use stepwise to select best mode l
+aic_1 <- MASS::stepAIC(dk_fit, scope = list(upper = dk_fit, 
+                             lower = dk_fit_null),
+        direction = "both", k = 2) # forward based on p-value
+
+# filter vars significant at 5% and calculate exponential
+broom::tidy(aic_1) |> 
+  filter(p.value<0.05) |> 
+  mutate(oddsratio = exp(estimate)) |> 
+  select(term, oddsratio, p.value)
+  
+```
+
+The best model is the one without age but includes age\^2. So we run the
+full model to keep the lower level variables included.
+
+The model has some interesting findings to who did not respond to our
+findings. Some things we can see with the odds ratios (excluding
+interpretation of countries as that is covered above):
+
+-   women are around 20% more likely to give NA responses
+
+-   Anti-lgbti rights people were about 10% more likely to not respond
+
+-   Internet use was significant but is not interpertable. If you had
+    not used the internet (higher NA likelihood) or used it 2-3 times a
+    week (lower NA likelihood) compared to everyday use
+
+-   Social class was significant at all levels, compared to the working
+    class, you were more likely to not respond to our target variable if
+    you reported being in the lower middle, middle or upper middle
+    class. I.e. working class were less likely to answer this question.
+
+\~\~\~\~\~\~\~\~\~ SHOULD WE DELETE THIS SECTION ON UNDERSAMPLING/CLASS
+IMBALANCE\~\~\~\~
+
+Below is an option using undersampling which is probably more legit too.
+maybe good to include if we aren't doing in other sections.
+
+```{r}
+# split to test and training
+na_model <- glm(target_NA ~ .,
+                      data = dk_target2, 
+                      family = "binomial")
+summary(na_model)
+broom::tidy(na_model)
+
+exp(coefficients(na_model))
+```
+
+Approach to test relationship to DK with splitting and undersampling:
+
+```{r}
+# create new dataset with just vars we want, including age^2
+dk_target2 <- dk_target |> 
+  select(target_NA, lgb_discri, age, antilgbtq_rights, internet_use, social_class, country_name) |> 
+  mutate(age_sq = age*age, .after = age)
+
+# to deal with some class imbalance, undersample from the majority group (NA = 0)
+library(caret)
+set.seed(123)
+# Generate an index
+index <- createDataPartition(dk_target2$target_NA, p = 0.7, list = FALSE, times = 1)
+
+# Subset the dataframe
+train <- dk_target2[index, ]
+test <- dk_target2[-index, ]
+# check splits 
+prop.table(table(train$target_NA))
+prop.table(table(test$target_NA))
+```
+
+Now undersample the majority
+
+```{r}
+set.seed(123)
+library(ROSE)
+under <- ovun.sample(target_NA~., 
+                     data=train, 
+                     method = "under", 
+                     N = 4000)$data 
+    # limit the sample to 4000 obs as we have ~2300 for target minority class. 
+
+table(under$target_NA)
+
+#run the rf model 
+library(randomForest)
+rfunder <- randomForest(target_NA~., data=under)
+rfunder
+```
+
+We see that only around 5% of the variance is explained.
+
+\~\~\~ REMOVE TO HERE IF WE DON'T WANT THE ABOVE
+
+### Testing the NA values against paradata
+
+Here we extend the model to see if paradata is related to changed
+non-response.
+
+```{r}
+para <- paradata |> 
+  bind_cols(trans_docs = data$trans_docs,
+            age = data$age,
+            gender = data$gender,
+            country = data$country) |> 
+  mutate(target_NA = ifelse(is.na(trans_docs), 1, 0)) |> 
+  select(-serialid, -trans_docs)
+
+summary(para$target_NA)
+str(para)
+```
+
+First, again test correlation. We use Cramers V since we only have
+factors:
+
+```{r}
+target_var <- "target_NA"
+para_vars <- names(para)[names(para) != target_var]
+
+cramers_v_results <- list()
+
+for (variable in para_vars) {
+    contingency_table <- table(para[[target_var]], 
+                               para[[variable]])
+    contingency_table_no_dk <- contingency_table[, colnames(contingency_table) != "DK"]
+    cramers_v <- CramerV(contingency_table_no_dk) 
+    # include this for no DK as it is all zero which creates errors
+    cramers_v_results[[variable]] <- cramers_v
+}
+
+
+# Create a Tibble for Results
+tibble(variable = names(cramers_v_results),
+       cramers_v = unlist(cramers_v_results)) |> 
+  arrange(desc(cramers_v))
+
+```
+
+Again, we see low correlation with the paradata and cramers V.
+
+Second, we run another logistic model with just Paradata included.
+
+```{r}
+na_para_model <- glm(target_NA ~ p2 + p3r + p4 + p5 + age + I(age*age) + gender + factor(country), 
+                     data = para, 
+                     family=binomial(link = "logit"))
+
+broom::tidy(na_para_model) |> 
+  filter(p.value<0.05) |> 
+  mutate(oddsratio = exp(estimate)) |> 
+  select(term, oddsratio, p.value)
+```
+
+We see that when controlling for age, gender and country, the survey
+cooperation variable is significant.
+
+When compared to those with an excellent cooperation rating, people were
+more likely to respond. This increases with lacking cooperation. If
+cooperation was fair, there was around 40% more chance of NA, if
+cooperation was average, around 75% higher chance of NA. If cooperation
+was bad, there was about 350% higher chance of a NA response to our
+target variable.
+
+Overall, the correlations with our target variables are low which means
+we don't have a major concern. Some are interesting e.g. interview
+cooperation. The worse the cooperation, the more likely to not respond
+to the question. This could be underreporting No votes, because as we
+saw in the descriptive analysis, the worse the cooperation, the higher
+the No vote for supporting trans_docs. There could also be some reverse
+causality, as not responding leads to a worse cooperation score. But the
+odds ratios here are very high.
+
 # Imputing missing data
 
 To be done...
-
-### Analysis of missing values.
-
-Marga discussed the importance of understanding missing values. I think
-this will be an important section where we also model what type of
-people are more/less likely to not respond. It's a sort of robustness
-check to see how much we can trust the models. Or if specific
-demographics of people are less likely to respond, then we may trust it
-less.
-
-E.g. if men/religious people are less likely to respond, it could be an
-issue. Ideally we would test the representativeness of our respondents
-to the questions about transgender discrimination and the overall
-populations.
 
 # Explanatory model
 
 To be done...
 
-Idea was; run a stepwise with all individual data, get back important variables and then run a mixed model adding country level variables
+Idea was; run a stepwise with all individual data, get back important
+variables and then run a mixed model adding country level variables
 
 ### Simple logistic regression
 
 I am using only individual level data for now
 
-Example below can also be done with less variables to ensure readibility 
+Example below can also be done with less variables to ensure readibility
 
 ```{r}
 data <- data |> 
@@ -1528,7 +1981,8 @@ summary(simple_logistic)
 
 No support are 1s basically and support are 0s.
 
-From documentation: "the first level denotes failure and all others success".
+From documentation: "the first level denotes failure and all others
+success".
 
 ```{r}
 levels(data$trans_docs)
@@ -1582,7 +2036,6 @@ auc(data$trans_docs, predicted_probs)
 #stepAIC <- step(simple_logistic, direction = "both")
 #stepAIC
 ```
-
 
 Should we use OLS instead of Stepwise?
 
@@ -1638,36 +2091,39 @@ Let's use our brain and common sense to choose the best combinations
 
 # Predictive model
 
-Summarize individual data to a country level (ex. percentage of population living in rural areas by country, percentage of people from minority x by country)
+Summarize individual data to a country level (ex. percentage of
+population living in rural areas by country, percentage of people from
+minority x by country)
 
-Run random forest/gradient boosting/logistic regression with leave-one-out cross validation
+Run random forest/gradient boosting/logistic regression with
+leave-one-out cross validation
 
 ## Aggregating individual data to country level
 
-We should be builiding a dataframe with 28 rows (1 per country), but many variables (ex, percentage of christian people by country, percentage of very satisfied with lives people by country, percentage of people that belong to the roma minority etc.; our target variable would become % of people that support trans_docs by country)
+We should be builiding a dataframe with 28 rows (1 per country), but
+many variables (ex, percentage of christian people by country,
+percentage of very satisfied with lives people by country, percentage of
+people that belong to the roma minority etc.; our target variable would
+become % of people that support trans_docs by country)
 
 ## Linear regression
 
-
-
 ## Random forest
-
-
 
 ## Gradient boosting
 
-
 # Brad's theory notes
 
-Leaving this section here, it is to be deleted as we incorporate what we need from here into the explanatory model part
+Leaving this section here, it is to be deleted as we incorporate what we
+need from here into the explanatory model part
 
 #### Running a different logistic model for each country
 
-We now have a table to test some glmer modelling on. 
+We now have a table to test some glmer modelling on.
 
-Following this tutorial Marga sent and applying to the test data: 
+Following this tutorial Marga sent and applying to the test data:
 
-https://raffaelevacca.github.io/Intro-multilevel-with-R/
+<https://raffaelevacca.github.io/Intro-multilevel-with-R/>
 
 Testing a nested dataset by country
 
@@ -1707,51 +2163,58 @@ Testing a nested dataset by country
 
 #### Mixed models
 
-Fixed effects: Things that are the same across the cluster
-Random effects: Things that change within the cluster 
+Fixed effects: Things that are the same across the cluster Random
+effects: Things that change within the cluster
 
-The fixed and random effects could refer to either the intercept or the slope, as these can both vary between groups.
+The fixed and random effects could refer to either the intercept or the
+slope, as these can both vary between groups.
 
 ##### LMM equation structure in R
 
-To run a multilevel linear model, we use the lmer() function (“Linear Mixed Effects in R”) from the lme4 package. The syntax is similar to regression. 
-everything to the left of the | indicates the effects that should be random, and the variable to the right of the | is the grouping variable across which the effects should vary
+To run a multilevel linear model, we use the lmer() function (“Linear
+Mixed Effects in R”) from the lme4 package. The syntax is similar to
+regression. everything to the left of the \| indicates the effects that
+should be random, and the variable to the right of the \| is the
+grouping variable across which the effects should vary
 
-*Null model* 
-This has no slope, but random intercepts. It basically just takes the average. It has no independent (X) variables and is the proper naïve model. 
+*Null model* This has no slope, but random intercepts. It basically just
+takes the average. It has no independent (X) variables and is the proper
+naïve model.
 
-  null_model <- lmer(Y ~ (1|cntry), data = ess)
+null_model \<- lmer(Y \~ (1\|cntry), data = ess)
 
+*Random intercept model:* --\> Only the intercept differ. The slopes are
+equal for each group. We assume the same effect of X on Y for each
+group. Just that the group causes the difference.
 
-*Random intercept model:* 
---> Only the intercept differ. The slopes are equal for each group. We assume the same effect of X on Y for each group. Just that the group causes the difference. 
+random_int_model \<- lmer(Y \~ X + (1 \| group), data=df)
 
-  random_int_model <- lmer(Y ~ X + (1 | group), data=df)
+*Random intercept, random slope model* --\> Now we also let the slope
+vary by group. This means each group basically has it's own model. It is
 
-*Random intercept, random slope model* 
---> Now we also let the slope vary by group. This means each group basically has it's own model. It is 
-
-  random_intslope_model <- lmer(Y ~ X + (X | group), data=df)
+random_intslope_model \<- lmer(Y \~ X + (X \| group), data=df)
 
 For each, Y=target, X = independent vars (can be many)
 
 ##### Standard LMM Modelling Strategy
-(sourced from slides here: https://favstats.github.io/intro_multilevel/slides/#54)
-^ This is a useful resource, it goes through an ESS modelling doc 
+
+(sourced from slides here:
+<https://favstats.github.io/intro_multilevel/slides/#54>) \^ This is a
+useful resource, it goes through an ESS modelling doc
 
 Approach to multilevel model building based on Hox (2010)
 
-1/  Null Model (Random Intercept only)
-2/ Add independent Level 1 variables
-3/ Add independent Level 2 variables
-4/ Add random slopes
-5/ (Cross-level) interactions
+1/ Null Model (Random Intercept only) 2/ Add independent Level 1
+variables 3/ Add independent Level 2 variables 4/ Add random slopes 5/
+(Cross-level) interactions
 
-Each step, check whether your model is significantly improved compared to the previous one.
+Each step, check whether your model is significantly improved compared
+to the previous one.
 
-##### Basic LMM testing with toy data 
+##### Basic LMM testing with toy data
 
 First, null model:
+
 ```{r}
 m_null <- glmer(trans_docs ~ (1|country),
                data = complete_df,
@@ -1763,14 +2226,15 @@ summary(m_null)
 
 To come back and reinterpret... don't really know at this stage.
 
-Test flexplot and broom.mixed usage: 
+Test flexplot and broom.mixed usage:
 
 ```{r}
 # #devtools::install_github("dustinfife/flexplot")
 # library(flexplot)
 ```
 
-Here it has some examples of code and output for saved logistic model fits
+Here it has some examples of code and output for saved logistic model
+fits
 
 ```{r}
 # # don't think flexplot will be super useful as we have so many categorical variables
@@ -1784,9 +2248,9 @@ Here it has some examples of code and output for saved logistic model fits
 
 ```
 
-Random effects model 
+Random effects model
 
-- Including individual level variables only with country: 
+-   Including individual level variables only with country:
 
 ```{r}
 n_randeffect <- glmer(trans_docs ~ 
@@ -1798,7 +2262,8 @@ n_randeffect <- glmer(trans_docs ~
                nAGQ = 10)
 ```
 
-This suggests the data needs to be rescaled, to check which variables are the issue:
+This suggests the data needs to be rescaled, to check which variables
+are the issue:
 
 ```{r}
 library(caret)
@@ -1828,33 +2293,24 @@ summary(n_randeffect)
 
 Can we interpret this...
 
+*Example Random effects models:* m \<- glmer(remission \~ IL6 + CRP +
+CancerStage + LengthofStay + Experience + (1 \| DID), data = hdp, family
+= binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 10)
 
+*Example from last year code* glm_model_4 \<- glmer(binary_qc19 \~
+male + d11 + I(d11\^2) + political_ideology + Religion_cat +
+sd1_7_factor + d60_ordinal + qc15_1_ordinal + prop_gndr_bin +
+prop_dis_wide + Unemployment + (1 \| country_name), data = Data, family
+= binomial, control = glmerControl(optimizer = "bobyqa", optCtrl =
+list(maxfun = 100000)))
 
-*Example Random effects models:* 
-m <- glmer(remission ~ IL6 + CRP + CancerStage + LengthofStay + Experience +
-    (1 | DID), data = hdp, 
-    family = binomial, control = glmerControl(optimizer = "bobyqa"),
-    nAGQ = 10)
-
-*Example from last year code*
-glm_model_4 <- glmer(binary_qc19 ~ male + d11 + I(d11^2) + political_ideology +
-               Religion_cat + sd1_7_factor + d60_ordinal + qc15_1_ordinal +
-               prop_gndr_bin + prop_dis_wide + Unemployment + (1 | country_name),
-               data = Data, family = binomial, 
-               control = glmerControl(optimizer = "bobyqa", optCtrl = list(maxfun = 100000)))
-
-
-
-_Potentially useful package for visualising and interpreting linear mixed models:_ 
-Flexplot -> https://github.com/dustinfife/flexplot
+*Potentially useful package for visualising and interpreting linear
+mixed models:* Flexplot -\> <https://github.com/dustinfife/flexplot>
 Functions to quickly visualise LMM models and compare their performance.
 
-broom.mixed
-The function broom.mixed::tidy() gives us all model parameters (random and fixed).
+broom.mixed The function broom.mixed::tidy() gives us all model
+parameters (random and fixed).
 
-
-
-_Useful calculations:_
-  - ICC (intra cluster correlation. How alike each of the observations within each group are)
-  - ANOVA for model comparison: anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
-
+*Useful calculations:* - ICC (intra cluster correlation. How alike each
+of the observations within each group are) - ANOVA for model comparison:
+anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
