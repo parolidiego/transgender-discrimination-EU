@@ -266,7 +266,7 @@ Surprisingly, the two indexes have a very weak positive correlation. While they 
 not inverse, I was expecting them to measure opposite things, so maybe the correlation
 coefficient is not useful here because of the low variation of both variables (specially
 GDI).
-I don't know what else to do with this info other than keeping GII and discarding GII.
+I don't know what else to do with this info other than keeping GII and discarding GDI.
 ```{r}
 gender_index <- gender_index |> 
   select(-gender_development_index)
@@ -297,10 +297,7 @@ democracy_index <- democracy_index |>
 
 str(democracy_index)
 ```
-
-In both of these tables (Gender Equality and Democracy indexes) there
-are more indicators apart from the overall indexes, we have to decide if
-we think they're useful or if we can discard some/all of them.
+In this case, we are only keeping the 
 
 ```{r}
 democracy_index <- democracy_index |> 
@@ -943,6 +940,64 @@ country_level_data <- codelist |>
 str(country_level_data)
 ```
 
+I thought by aggregating we meant synthesizing the information from the individual respondents into country-level variables? but I don't know if this is something that models do directly.
+
+My approach was using means for numeric variables:
+```{r}
+names(select(data, where(is.numeric)))
+
+data_num <- data %>%
+  select(-serialid) |> 
+  group_by(country) %>%
+  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
+```
+
+As well as for dummies:
+```{r}
+# searching for factor variables with two levels
+dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
+dummy_names
+
+dummy_levels <- lapply(data[dummy_names], levels)
+dummy_levels
+
+data_dummy <- data %>%
+  select(country, all_of(dummy_names)) %>%
+  mutate(across(all_of(dummy_names),
+                ~ case_when(
+                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
+                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
+                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
+                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
+                ),
+                .names = "{.col}_num"))
+```
+
+I converted factors with 2 levels to numerical 0-1 so we can compute their means.
+
+```{r}
+data_dummy <- data_dummy %>%
+  group_by(country) %>%
+  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+# substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
+data_dummy <- data_dummy %>%
+  rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
+```
+
+Now we can join the two datasets:
+```{r}
+data_aggr <- data_num %>%
+  left_join(data_dummy, by = "country")
+```
+
+The next variables are not numeric nor factor with 2 levels, so they are not included in data_aggr:
+```{r}
+names(data)[!sapply(data, is.numeric) &
+              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+```
+///////
+
 Not using paradata for now. We can discuss how to use it
 
 ```{r}
@@ -1112,7 +1167,8 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = left_right)) +
   theme_minimal()
 ```
 
-Stronger left-wing support for trans rights. Right-wing respondents are the most divided, with high opposition levels.
+Stronger left-wing support for trans rights. Right-wing respondents are the most 
+divided, with high opposition levels.
 Non-responses are highest among those without ideological alignment.
 
 #### Social class
@@ -1137,6 +1193,45 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = social_class)) +
   ) +
   theme_minimal()
 ```
+Although D63 of the questionnaire measures (oneself's and one's household's) self-perceived
+social class, it is still a relevant and seemingly divisive variable. We observe a positive 
+correlation, where support grows with increasing (perceived) social class, while explicit 
+lack of support and no response are higher for lower-class individuals.
+
+#### Education
+
+```{r}
+ggplot(data, aes(x = trans_docs, y = years_edu)) +
+  geom_violin() +
+  labs(x = "Support for trans people changing their civil documents", y = "Age when stopped full-time education") +
+  ggtitle("Distribution of support by education")
+```
+COMMENT
+Support doesn't seem to be related to education.
+
+#### Area of residence
+
+```{r}
+data_summary <- data |> 
+  count(trans_docs, community, name = "n") |> 
+  group_by(community) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = community)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by area of residence",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within area of residence",
+    fill = "area of residence"
+  ) +
+  theme_minimal()
+```
+COMMENT
+Support does not vary much by area of residence.
 
 ### Having trans friends
 
@@ -1161,11 +1256,128 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = friends_trans)) 
 
 ```
 
-Having trans friends is associated with a higher support, while those who refuse to disclose their connections to trans people tend to oppose more. 
+Having trans friends is associated with a higher support, while those who refuse
+to disclose their connections to trans people tend to oppose more. 
 
 ## Country-level data
 
-Nothing yet...
+Replication of the plot in Marga's document. This is probably not needed in the
+final version of the document.
+```{r}
+country_support <- data %>%
+  mutate(
+    trans_docs = case_when(
+      is.na(trans_docs) ~ "DK",
+      trans_docs == "Yes" ~ "1",
+      trans_docs == "No" ~ "2",
+      TRUE ~ as.character(trans_docs)
+    )
+  ) %>%
+  group_by(country, trans_docs = trans_docs) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(country) %>%
+  mutate(proportion = (count / sum(count))*100) %>%
+  ungroup()
+
+ggplot(country_support, aes(x = factor(country, levels = country_support %>%
+                                       filter(trans_docs == "1") %>%
+                                       arrange(desc(proportion)) %>%
+                                       pull(country)), 
+                           y = proportion,
+                           fill = factor(trans_docs, levels = c("1", "2", "DK")))) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = c("1" = "#497ba9", "2" = "#d56e6e", "DK" = "#9a9595"),
+                   name = "",
+                   labels = c("Yes", "No", "Don't know")) +
+  geom_text(aes(label = round(proportion)), 
+          position = position_stack(reverse = TRUE, vjust = 0.5),
+          size = 3.5, color = "white") +
+  labs(
+    title = "QC9: Do you think transgender persons should be able to change their civil documents to match their inner gender identity?",
+    x = "", 
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        plot.title = element_text(size = 9),
+        panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+There are some mismatches, I guess the data might have become distorted at some
+point during processing, but I don't know when.
+
+```{r}
+trans_docs_prop <- country_support %>%
+  filter(trans_docs == "1") %>%
+  select(country, proportion) %>%
+  rename(trans_support = proportion)
+
+country_long <- country_level_data %>%
+  inner_join(trans_docs_prop, by = c("iso2c" = "country")) |> 
+  pivot_longer(cols = c(gdp_pc_ppp, gender_inequality_index, lgbt_policy_index, democracy_index),
+    names_to = "variable", values_to = "value")
+
+ggplot(country_long, aes(x = value, y = trans_support)) +
+  geom_smooth(method = "lm", se = FALSE, color = "lightgray") + # we can remove this
+  geom_point(size = 2, color = "blue", alpha = 0.7) +
+  geom_text(aes(label = iso3c), vjust = -0.5, hjust = 0.5, size = 3) +
+  facet_wrap(~variable, scales = "free_x") +
+  labs(
+    title = "Relationship between country-level variables and trans support",
+    x = "Country-level variable",
+    y = "Proportion of Yes answers"
+  ) +
+  theme_minimal()
+```
+
+Democracy and LGBT Policy indeces seem to have a positive linear relationship with
+the target variable, while Gender Inequality index has a negative linear relationship.
+The relationship with GDP per capita is non-linear (logarithmic?). There appears to
+be a "ceiling" of support, beyond which increases in GDP per capita lose effect.
+
+Boxplots for country-level variables:
+```{r}
+ggplot(country_long, aes(y = value, x = variable)) +
+  geom_boxplot(outlier.color = "red", outlier.shape = 16, fill = "lightblue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Distribution of country-level variables", x = NULL, y = "value") +
+  facet_wrap(~variable, scales = "free") +
+  theme(axis.text.y = element_blank(),  
+        axis.ticks.x = element_blank())
+```
+Histograms of scaled country data:
+```{r}
+# scaled_data <- country_level_data %>%
+#   select(-iso3c, -iso2c, -country) %>%
+#   mutate(across(everything(), scale)) %>%  # Standardize all variables
+#   pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+# 
+# # Plot histograms
+# ggplot(scaled_data, aes(x = value)) +
+#   geom_histogram(fill = "lightblue", bins = 17) +
+#   facet_wrap(~variable, scales = "free_y") +
+#   theme_minimal() +
+#   labs(title = "Distribution of scaled country-level Variables", x = "Standardized Value", y = "Count")
+```
+
+```{r}
+library(corrplot)
+
+country_level_data <- country_level_data %>%
+  inner_join(trans_docs_prop, by = c("iso2c" = "country"))
+
+cor_matrix <- cor(country_level_data %>%
+                    select(gdp_pc_ppp, democracy_index, gender_inequality_index, 
+                           lgbt_policy_index, trans_support),
+                  use = "complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+```
 
 ## Paradata
 
