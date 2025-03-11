@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Loading libraries
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning=FALSE}
 rm(list = ls())
 library(MASS)
 library(tidyverse)
@@ -37,6 +37,11 @@ library(tidyr)
 library(kableExtra)
 library(gmodels)
 library(flexplot)
+library(corrplot)
+library(caret)
+library(ROSE)
+library(randomForest)
+library(pROC)
 ```
 
 # Loading data
@@ -51,7 +56,7 @@ data_raw <- read_dta("ZA7575.dta")
 
 This is for joins:
 
-```{r}
+```{r, message=FALSE}
 # building a df with country names and codes for the EU-28
 codelist <- countrycode::codelist |> 
   select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
@@ -611,10 +616,10 @@ Will now look into the labels for the different levels that our factor
 variables can take:
 
 ```{r}
-attr(data$d11r1, "labels")
-names(attr(data$d11r1, "labels"))
-tibble(name_labels = names(attr(data$d11r1, "labels")),
-       labels = attr(data$d11r1, "labels"))
+attr(data$d70, "labels")
+names(attr(data$d70, "labels"))
+tibble(name_labels = names(attr(data$d70, "labels")),
+       labels = attr(data$d70, "labels"))
 
 # Create a list of tibbles containing the labels and their associated name for each variable
 list_label_tibbles <- 
@@ -632,7 +637,7 @@ list_label_tibbles <-
 list_label_tibbles <- setNames(list_label_tibbles, names(data))
 
 # For example
-list_label_tibbles$d11r1
+list_label_tibbles$d70
 ```
 
 Right column is what it appears in our data (as a number). Left column
@@ -889,20 +894,20 @@ nonetheless we keep this level because it makes sense
 data |> count(social_class)
 ```
 
-Given the low number of observations in some categories and the high
-number of categories we opt to aggregate some of them, otherwise we risk
-too much noise in our models.
+Given the low number of observations in some categories of the variable `religion` and the high number of categories we opt to aggregate some of them, otherwise we risk too much noise in our models.
 
 ```{r}
 data |> count(religion)
+
+# Checking if the means of groups we are going to aggregate are similar
 data |> 
   mutate(trans_docs=as.numeric(trans_docs)) |> 
   summarise(mean = mean(trans_docs, na.rm=TRUE), .by = religion) |>
   arrange(mean)
+
 # We are going to group together atheist with agnostic
 # We are also going to put sikh, buddhists, jewish and hindu into the other category
 # Finally we are going to group together all muslims
-
 data <- data |> 
   mutate(religion = fct_collapse(religion,
                                 "Non-believers" = c("Atheist", "Non believer or agnostic"),
@@ -913,7 +918,7 @@ data <- data |>
 data |> count(religion)
 ```
 
-### Missing values
+### Recoding missing values
 
 Now we will substitute de "Refusal" answers in the remaining variables
 as NAs. If the respondent refuses to answer it's equivalent to not
@@ -979,7 +984,7 @@ data <- data |>
   select(-c("disc_where", "disc_contact"))
 ```
 
-# Aggregating country-level data
+# Joining together country-level data
 
 ```{r}
 country_level_data <- codelist |> 
@@ -993,73 +998,6 @@ country_level_data <- codelist |>
 str(country_level_data)
 ```
 
-I thought by aggregating we meant synthesizing the information from the
-individual respondents into country-level variables? but I don't know if
-this is something that models do directly.
-
-My approach was using means for numeric variables:
-
-```{r}
-names(select(data, where(is.numeric)))
-
-data_num <- data %>%
-  select(-serialid) |> 
-  group_by(country) %>%
-  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
-```
-
-As well as for dummies:
-
-```{r}
-# searching for factor variables with two levels
-dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
-dummy_names
-
-dummy_levels <- lapply(data[dummy_names], levels)
-dummy_levels
-
-data_dummy <- data %>%
-  select(country, all_of(dummy_names)) %>%
-  mutate(across(all_of(dummy_names),
-                ~ case_when(
-                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
-                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
-                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
-                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
-                ),
-                .names = "{.col}_num"))
-```
-
-I converted factors with 2 levels to numerical 0-1 so we can compute
-their means.
-
-```{r}
-data_dummy <- data_dummy %>%
-  group_by(country) %>%
-  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
-
-# substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
-data_dummy <- data_dummy %>%
-  rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
-```
-
-Now we can join the two datasets:
-
-```{r}
-data_aggr <- data_num %>%
-  left_join(data_dummy, by = "country")
-```
-
-The next variables are not numeric nor factor with 2 levels, so they are
-not included in data_aggr:
-
-```{r}
-names(data)[!sapply(data, is.numeric) &
-              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
-```
-
-///////
-
 Not using paradata for now. We can discuss how to use it
 
 ```{r}
@@ -1067,8 +1005,6 @@ complete_df <- data |>
   left_join(country_level_data, 
             by = join_by(country == iso2c)) |> 
   select(-c(country.y, iso3c))
-
-str(complete_df)
 ```
 
 # Exploratory Data Analysis
@@ -1203,11 +1139,9 @@ CrossTable(data$religion, data$trans_docs,
            format = "SPSS")
 ```
 
-Out of all observations Catholic, Atheists/Agnostic, Orthodox Christians
+Out of all observations Catholic, non-believers, Orthodox Christians
 and Protestants sum up to the 81.04% of our sample, being the rest
-underrepresented. I believe the warning "Chi-squared approximation may
-be incorrect" is because of this. Consequently I don't know if we can
-trust the p-value.
+underrepresented.
 
 ```{r}
 data_summary <- data |> 
@@ -1293,7 +1227,7 @@ ggplot(data, aes(x = trans_docs, y = years_edu)) +
   ggtitle("Distribution of support by education")
 ```
 
-COMMENT Support doesn't seem to be related to education.
+Support doesn't seem to be related to education.
 
 #### Area of residence
 
@@ -1317,9 +1251,11 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = community)) +
   theme_minimal()
 ```
 
-COMMENT Support does not vary much by area of residence.
+Support does not vary much by area of residence.
 
-### Having trans friends
+### Other individual-level variables
+
+#### Having trans friends
 
 ```{r}
 data_summary <- data |> 
@@ -1457,8 +1393,6 @@ Histograms of scaled country data:
 ```
 
 ```{r}
-library(corrplot)
-
 country_level_data <- country_level_data %>%
   inner_join(trans_docs_prop, by = c("iso2c" = "country"))
 
@@ -1577,7 +1511,14 @@ Can we do anyhting about this?
 
 # Class imbalance
 
-Some words about class imbalance? Needed?
+```{r}
+prop.table(table(data$trans_docs, useNA = "ifany"))
+prop.table(table(data$trans_docs, useNA = "no"))
+```
+
+Our target variable has a 60/40 distribution so we are not worried about class imbalance.
+
+Less represented classes in other variables have already been aggregated if deemed necessary.
 
 # Analysis of missing values.
 
@@ -1779,7 +1720,7 @@ dk_fit <- glm(target_NA ~ lgb_discri + gender + age + I(age*age) + antilgbtq_rig
 # use stepwise to select best mode l
 aic_1 <- MASS::stepAIC(dk_fit, scope = list(upper = dk_fit, 
                              lower = dk_fit_null),
-        direction = "both", k = 2) # forward based on p-value
+        direction = "both", k = 2, trace=0) # forward based on AIC
 
 # filter vars significant at 5% and calculate exponential
 broom::tidy(aic_1) |> 
@@ -1818,7 +1759,7 @@ maybe good to include if we aren't doing in other sections.
 ```{r}
 # split to test and training
 na_model <- glm(target_NA ~ .,
-                      data = dk_target2, 
+                      data = dk_target, 
                       family = "binomial")
 summary(na_model)
 broom::tidy(na_model)
@@ -1835,7 +1776,6 @@ dk_target2 <- dk_target |>
   mutate(age_sq = age*age, .after = age)
 
 # to deal with some class imbalance, undersample from the majority group (NA = 0)
-library(caret)
 set.seed(123)
 # Generate an index
 index <- createDataPartition(dk_target2$target_NA, p = 0.7, list = FALSE, times = 1)
@@ -1852,7 +1792,6 @@ Now undersample the majority
 
 ```{r}
 set.seed(123)
-library(ROSE)
 under <- ovun.sample(target_NA~., 
                      data=train, 
                      method = "under", 
@@ -1862,7 +1801,6 @@ under <- ovun.sample(target_NA~.,
 table(under$target_NA)
 
 #run the rf model 
-library(randomForest)
 rfunder <- randomForest(target_NA~., data=under)
 rfunder
 ```
@@ -1992,10 +1930,10 @@ levels(data$trans_docs)
 
 ```{r}
 # all the coefficients
-coef(simple_logistic)
+head(coef(simple_logistic))
 
 # for their interpretation
-exp(coef(simple_logistic))
+head(exp(coef(simple_logistic)))
 # The exponential of the slope coefficient (exp(B)) tells us the factor by which odds increase if the independent variable increases by one unit?
 ```
 
@@ -2004,21 +1942,21 @@ exp(coef(simple_logistic))
 simple_logistic$aic
 
 #predicted probabilities of being a 1 (i.e. a refusal of possibility of trans doc)
-simple_logistic$fitted.values
+predicted_probs <- simple_logistic$fitted.values
 # same by running
 predicted_probs <- predict(simple_logistic, type = "response")
+head(predicted_probs)
 
 # Turning them to classes using custum threshold
 predicted_classes <- ifelse(predicted_probs > 0.5, "No", "Yes")
+head(predicted_classes)
 ```
 
 ```{r}
-library(caret)
 confusionMatrix(as.factor(data$trans_docs), as.factor(predicted_classes))
 ```
 
 ```{r}
-library(pROC)
 roc_obj <- roc(data$trans_docs, predicted_probs)
 
 #Terrible graphs, do we have better ones?
@@ -2033,8 +1971,8 @@ auc(data$trans_docs, predicted_probs)
 ## Stepwise regression
 
 ```{r}
-#stepAIC <- step(simple_logistic, direction = "both")
-#stepAIC
+stepAIC <- step(simple_logistic, direction = "both")
+stepAIC
 ```
 
 Should we use OLS instead of Stepwise?
@@ -2106,7 +2044,73 @@ percentage of very satisfied with lives people by country, percentage of
 people that belong to the roma minority etc.; our target variable would
 become % of people that support trans_docs by country)
 
-## Linear regression
+Synthesizing the information from the individual respondents into country-level variables? but I don't know if this is something that models do directly.
+
+My approach was using means for numeric variables:
+
+```{r}
+names(select(data, where(is.numeric)))
+
+data_num <- data %>%
+  select(-serialid) |> 
+  group_by(country) %>%
+  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
+str(data_num)
+```
+
+As well as for dummies:
+
+```{r}
+# searching for factor variables with two levels
+dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
+dummy_names
+
+dummy_levels <- lapply(data[dummy_names], levels)
+dummy_levels
+
+data_dummy <- data %>%
+  select(country, all_of(dummy_names)) %>%
+  mutate(across(all_of(dummy_names),
+                ~ case_when(
+                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
+                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
+                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
+                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
+                ),
+                .names = "{.col}_num"))
+```
+
+I converted factors with 2 levels to numerical 0-1 so we can compute
+their means.
+
+```{r}
+data_dummy <- data_dummy %>%
+  group_by(country) %>%
+  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+# substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
+data_dummy <- data_dummy %>%
+  rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
+str(data_dummy)
+```
+
+Now we can join the two datasets:
+
+```{r}
+data_aggr <- data_num %>%
+  left_join(data_dummy, by = "country")
+```
+
+The next variables are not numeric nor factor with 2 levels, so they are
+not included in data_aggr:
+
+```{r}
+names(data)[!sapply(data, is.numeric) &
+              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+```
+
+
+## Linear regression with LASSO
 
 ## Random forest
 
@@ -2266,7 +2270,6 @@ This suggests the data needs to be rescaled, to check which variables
 are the issue:
 
 ```{r}
-library(caret)
 # check for nearzero variance, if so those could be removed
 nearZeroVar(complete_df, saveMetrics = TRUE)
 # see no issues. So all variables stay.
