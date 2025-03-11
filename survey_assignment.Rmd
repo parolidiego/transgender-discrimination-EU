@@ -1801,7 +1801,7 @@ dk_fit_null <- glm(target_NA ~ 1,
               data = dk_target, 
               family = "binomial")
 # run full fit model of most correlated vars with country (also age^2 for good practice)
-dk_fit <- glm(target_NA ~ lgb_discri + gender + age + I(age*age) + antilgbtq_rights + internet_use + social_class + country_name, 
+dk_fit <- glm(target_NA ~ gender + age + I(age*age) + antilgbtq_rights + internet_use + social_class + country_name, 
               data = dk_target, 
               family = "binomial")
 
@@ -1860,7 +1860,7 @@ Approach to test relationship to DK with splitting and undersampling:
 ```{r}
 # create new dataset with just vars we want, including age^2
 dk_target2 <- dk_target |> 
-  select(target_NA, lgb_discri, age, antilgbtq_rights, internet_use, social_class, country_name) |> 
+  select(target_NA, age, antilgbtq_rights, internet_use, social_class, country_name) |> 
   mutate(age_sq = age*age, .after = age)
 
 # to deal with some class imbalance, undersample from the majority group (NA = 0)
@@ -2058,14 +2058,14 @@ I am using only individual level data for now
 Example below can also be done with less variables to ensure readibility
 
 ```{r}
-data <- data |> 
+datalr <- data |> 
   # Dropping all NAs for now (glm does this automatically already)
   drop_na() |> 
   # Selecting only predictor variables
   select(-c("serialid", "country"))
 # Notice df goes from 27k observations to 17k observations 
 
-simple_logistic <- glm(trans_docs ~ ., data = data, family = binomial(link = "logit"))
+simple_logistic <- glm(trans_docs ~ ., data = datalr, family = binomial(link = "logit"))
 summary(simple_logistic)
 # Scaling needed? If so where it should be done?
 ```
@@ -2076,7 +2076,7 @@ From documentation: "the first level denotes failure and all others
 success".
 
 ```{r}
-levels(data$trans_docs)
+levels(datalr$trans_docs)
 # Yes = failure = 0
 # No = success = 1
 ```
@@ -2106,11 +2106,11 @@ head(predicted_classes)
 ```
 
 ```{r}
-confusionMatrix(as.factor(data$trans_docs), as.factor(predicted_classes))
+confusionMatrix(as.factor(datalr$trans_docs), as.factor(predicted_classes))
 ```
 
 ```{r}
-roc_obj <- roc(data$trans_docs, predicted_probs)
+roc_obj <- roc(datalr$trans_docs, predicted_probs)
 
 #Terrible graphs, do we have better ones?
 pROC::ggroc(roc_obj)
@@ -2118,7 +2118,7 @@ plot(roc_obj)
 
 coords(roc_obj, "best")
 
-auc(data$trans_docs, predicted_probs)
+auc(datalr$trans_docs, predicted_probs)
 ```
 
 ## Stepwise regression
@@ -2159,7 +2159,7 @@ Cross-level interactions are particularly useful in multilevel research because 
 For example, in educational research: 1) Individual level: student characteristics (study time, prior knowledge). 2) Group level: school or classroom characteristics (class size, teaching method). 3) Cross-level interaction: Does the effect of study time on performance depend on class size?
 
 ```{r}
-complete_df<- complete_df |> 
+complete_df <- complete_df |> 
   drop_na() |> 
   select(-"serialid")
 
@@ -2205,7 +2205,6 @@ My approach was using means for numeric variables:
 names(select(data, where(is.numeric)))
 
 data_num <- data %>%
-  select(-serialid) |> 
   group_by(country) %>%
   summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
 str(data_num)
