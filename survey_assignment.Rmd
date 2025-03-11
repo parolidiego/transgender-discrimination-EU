@@ -17,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, message = FALSE}
 rm(list = ls())
+library(MASS)
 library(tidyverse)
 library(haven)
 library(readxl)
@@ -36,6 +37,8 @@ library(tidyr)
 library(kableExtra)
 library(gmodels)
 library(flexplot)
+library(corrplot)
+library(mice)
 ```
 
 # Loading data
@@ -1364,7 +1367,6 @@ Histograms of scaled country data:
 ```
 
 ```{r}
-library(corrplot)
 
 country_level_data <- country_level_data %>%
   inner_join(trans_docs_prop, by = c("iso2c" = "country"))
@@ -1474,15 +1476,167 @@ plot_data <- merged_paradata %>%
 
 Respondents who engaged better in the survey were more likely to express support.
 
-# Correlation and multicollinearity?
+# Correlation and multicollinearity
 
-Can we do anyhting about this?
+Now we want to take a look at the possible multicollinearity of our explanatory variables. For it, we calculate the correlation of our numerical variables. As we have too many variables, we visualize just those with a strong correlation to focus on key dependencies.
+
+```{r}
+
+cor_matrix <- cor(data %>%
+                    select_if(is.numeric) %>%
+                    select(-serialid),
+                  use = "complete.obs")
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+
+
+# Create a matrix where only correlations >= 0.7 are maintained
+cor_filtered <- ifelse(abs(cor_matrix) >= 0.7, cor_matrix, NA)
+
+# Graph
+corrplot(cor_filtered, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200),
+         na.label = " ",
+         insig = "blank") 
+```
+
+Most strong correlations are among variables related race, religion or sexual orientation discrimination. Consequently, we are grouping them into 3 new composite variables by averaging related ones, in order to reduce multicollinearity.
+
+```{r}
+# Creating grouped variables
+data <- data %>%
+  mutate(
+    racial_discri = rowMeans(select(., roma_discri, black_discri, asian_discri), na.rm = TRUE), #no white
+    sexual_discri = rowMeans(select(., lgb_discri, trans_discri, intersex_discri), na.rm = TRUE),
+    religious_discri = rowMeans(select(., jewish_discri, muslim_discri, buddihst_discri), na.rm = TRUE)
+  ) 
+
+# Removing original variables to avoid redundancy
+data <- data |> 
+  select(-c(roma_discri, black_discri, asian_discri, lgb_discri, trans_discri, intersex_discri, jewish_discri, muslim_discri, buddihst_discri))
+
+
+# Graphical representation
+cor_matrix <- cor(data %>%
+                    select_if(is.numeric) %>%
+                    select(-serialid),
+                  use = "complete.obs")
+
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+```
+
+We realize our new variables are still highly correlated between them. For reducing the dimensionality of the dataset even more while preserving information we create one single variable for general minority discrimination.
+
+```{r}
+
+# Creating grouped variable
+data <- data %>%
+  mutate(
+    minority_discri = rowMeans(select(., racial_discri, sexual_discri, religious_discri, disability_discri), na.rm = TRUE)) 
+
+```
+
+We decided to exclude white_discri, atheist_discri, christian_discri because we realized they had a median of 1 and a quite small mean, meaning there is almost no reported discrimination against these groups in the dataset.
+
+```{r}
+
+summary(data$white_discri)
+summary(data$atheist_discri)
+summary(data$christian_discri)
+
+data <- data |> 
+  select(-c(white_discri, atheist_discri, christian_discri, racial_discri, sexual_discri, religious_discri, disability_discri))
+
+```
+Final check of the correlation matrix to confirm that multicollinearity has been reduced.
+```{r}
+cor_matrix <- cor(data %>%
+                    select_if(is.numeric) %>%
+                    select(-serialid),
+                  use = "complete.obs")
+
+
+corrplot(cor_matrix, method = "color", type = "upper", 
+         addCoef.col = "black", tl.col = "black",
+         col = colorRampPalette(c("blue", "white", "red"))(200))
+```
 
 # Class imbalance
 
 Some words about class imbalance? Needed?
 
 # Imputing missing data
+
+lo hago con left right porque es la que mas nos interesa imputar, para decidir qué metodo usar. Uso mice (pmm random forest, porque es factor )
+
+```{r}
+
+mice_imputed <- data.frame(
+  original = data$left_right,
+  imputed_pmm = complete(mice(data, m=1, method = "pmm", seed=123))$left_right, # We write an m=1 so that it doesn't take that long
+  imputed_rf = complete(mice(data, m=1, method = "rf", seed=123))$left_right)
+
+
+# Define variables, titles, and colors for the updated set of distributions
+variables <- c("original", "imputed_pmm", "imputed_rf")
+titles <- c("Distribution of the left_right variable", "PMM-imputed distribution", "RF-imputed distribution")
+colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9")
+colors_border <- c("skyblue3", "#808080", "#808080")
+
+# Transform data to long format for ggplot
+mice_imputed_long <- mice_imputed %>%
+  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
+
+# Facet wrap
+mice_imputed_long %>%
+  mutate(title = factor(method, levels = variables, labels = titles)) %>%
+  ggplot(aes(x = value, fill = title)) +
+  geom_bar(color = "#808080", position = "identity", alpha = 0.7, stat = "count") +  # Cambio importante aquí
+  facet_wrap(~title, scales = "free_y") +
+  scale_fill_manual(values = colors_fill) +
+  theme_classic() +
+  theme(legend.position = "none") +
+  labs(title = "Comparison of Left-Right Imputation Methods",
+       x = "Left-Right Categories",
+       y = "Count")
+
+```
+
+They seem to perform almost the same. We will go with pmm.
+
+```{r}
+# Get the number of columns in the dataset
+num_cols <- ncol(data)
+
+# Define the imputation method for each column
+method_vector <- rep("pmm", num_cols)  # Use "pmm" for all columns
+
+# Identify the position of the target variable
+target_variable <- "trans_docs"
+target_position <- which(names(data) == target_variable)
+
+# Do not impute the target variable
+method_vector[target_position] <- ""  # Leave this position blank
+
+# Perform imputation without modifying the target variable
+imputed_data <- mice(data, method = method_vector, m = 1, seed = 123)
+
+# Get the fully imputed dataset
+final_data <- complete(imputed_data)
+
+
+colSums(is.na(data))
+colSums(is.na(final_data))
+
+```
+WE STILL HAVE NAs i don't understand why:(
+
 
 To be done...
 
