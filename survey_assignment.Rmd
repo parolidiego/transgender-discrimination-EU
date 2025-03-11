@@ -17,6 +17,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ```{r, message = FALSE}
 rm(list = ls())
+library(MASS)
 library(tidyverse)
 library(haven)
 library(readxl)
@@ -1574,14 +1575,66 @@ coords(roc_obj, "best")
 
 auc(data$trans_docs, predicted_probs)
 ```
+
 ## Stepwise regression
 
 ```{r}
-library(MASS)
-stepAIC <- step(simple_logistic, direction = "both")
-stepAIC
+#stepAIC <- step(simple_logistic, direction = "both")
+#stepAIC
 ```
 
+
+Should we use OLS instead of Stepwise?
+
+Also we can check coherence of Stepwise results with simple logistic regression's results
+
+## Mixed model
+
+Random Intercept Model:
+
+Allows the baseline level (intercept) to vary across groups. Assumes the relationship between predictors and outcome (slope) is the same for all groups
+
+In R syntax: y ~ x + (1|group)
+
+Example: Different schools might have different average test scores (random intercepts), but the effect of study hours on test scores is the same across all schools
+
+Random Slope Model:
+
+Allows the effect of a predictor (slope) to vary across groups. Can be used with or without random intercepts.
+
+In R syntax: y ~ x + (0+x|group) for random slope only, or y ~ x + (1+x|group) for both random intercept and slope
+
+Example: The effect of study hours on test scores might be stronger in some schools than others (random slopes)
+
+Random intercept models account for different baselines between groups, while random slope models account for different relationships between predictors and outcomes across groups. When both random intercepts and slopes are included, you're allowing both the baseline and the effect of predictors to vary by group.
+
+Interactions between group-level (higher-level) variables and individual-level (lower-level) variables in mixed models are called cross-level interactions.
+
+Cross-level interactions are particularly useful in multilevel research because they help you understand how the relationship between an individual-level predictor and the outcome varies as a function of a group-level characteristic.
+
+For example, in educational research: 1) Individual level: student characteristics (study time, prior knowledge). 2) Group level: school or classroom characteristics (class size, teaching method). 3) Cross-level interaction: Does the effect of study time on performance depend on class size?
+
+```{r}
+complete_df<- complete_df |> 
+  drop_na() |> 
+  select(-"serialid")
+
+# Scaling the variables speeds up the running time. However we loose interpretation?
+scaled_df <- complete_df |>
+  mutate(across(where(is.numeric), scale))
+
+glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequality_index + religion*gdp_pc_ppp + (1 | country), data=scaled_df, family=binomial(link="logit"))
+
+#variable1*variable2 includes both the two variables separetely and their interaction
+#variable1:variable2 includes only the interaction
+#+ (1|country) country is the grouping variable, means it includes different intercepts for each country
+
+summary(glmer_model)
+```
+
+The idea is to run interactions between individual level variables and country level variables choosing pair which make sense (ex. does the effect of being female on support for trans docs depend on the gender equality index? --> did this by doing gender*gender_inequality_index)
+
+Let's use our brain and common sense to choose the best combinations
 
 # Predictive model
 
@@ -1593,7 +1646,7 @@ Run random forest/gradient boosting/logistic regression with leave-one-out cross
 
 We should be builiding a dataframe with 28 rows (1 per country), but many variables (ex, percentage of christian people by country, percentage of very satisfied with lives people by country, percentage of people that belong to the roma minority etc.; our target variable would become % of people that support trans_docs by country)
 
-## Logistic
+## Linear regression
 
 
 
