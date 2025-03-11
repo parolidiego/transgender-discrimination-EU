@@ -1440,6 +1440,7 @@ CrossTable(merged_paradata$p3r, merged_paradata$trans_docs,
            format="SPSS")
 
 ```
+
 Respondent cooperation
 
 ```{r}
@@ -1470,7 +1471,16 @@ plot_data <- merged_paradata %>%
   mutate(percentage = count / sum(count) * 100)
 
 ```
+
 Respondents who engaged better in the survey were more likely to express support.
+
+# Correlation and multicollinearity?
+
+Can we do anyhting about this?
+
+# Class imbalance
+
+Some words about class imbalance? Needed?
 
 # Imputing missing data
 
@@ -1496,15 +1506,105 @@ To be done...
 
 Idea was; run a stepwise with all individual data, get back important variables and then run a mixed model adding country level variables
 
+### Simple logistic regression
+
+I am using only individual level data for now
+
+Example below can also be done with less variables to ensure readibility 
+
+```{r}
+data <- data |> 
+  # Dropping all NAs for now (glm does this automatically already)
+  drop_na() |> 
+  # Selecting only predictor variables
+  select(-c("serialid", "country"))
+# Notice df goes from 27k observations to 17k observations 
+
+simple_logistic <- glm(trans_docs ~ ., data = data, family = binomial(link = "logit"))
+summary(simple_logistic)
+# Scaling needed? If so where it should be done?
+```
+
+No support are 1s basically and support are 0s.
+
+From documentation: "the first level denotes failure and all others success".
+
+```{r}
+levels(data$trans_docs)
+# Yes = failure = 0
+# No = success = 1
+```
+
+```{r}
+# all the coefficients
+coef(simple_logistic)
+
+# for their interpretation
+exp(coef(simple_logistic))
+# The exponential of the slope coefficient (exp(B)) tells us the factor by which odds increase if the independent variable increases by one unit?
+```
+
+```{r}
+# AIC of model
+simple_logistic$aic
+
+#predicted probabilities of being a 1 (i.e. a refusal of possibility of trans doc)
+simple_logistic$fitted.values
+# same by running
+predicted_probs <- predict(simple_logistic, type = "response")
+
+# Turning them to classes using custum threshold
+predicted_classes <- ifelse(predicted_probs > 0.5, "No", "Yes")
+```
+
+```{r}
+library(caret)
+confusionMatrix(as.factor(data$trans_docs), as.factor(predicted_classes))
+```
+
+```{r}
+library(pROC)
+roc_obj <- roc(data$trans_docs, predicted_probs)
+
+#Terrible graphs, do we have better ones?
+pROC::ggroc(roc_obj)
+plot(roc_obj)
+
+coords(roc_obj, "best")
+
+auc(data$trans_docs, predicted_probs)
+```
+## Stepwise regression
+
+```{r}
+library(MASS)
+stepAIC <- step(simple_logistic, direction = "both")
+stepAIC
+```
+
+
 # Predictive model
 
 Summarize individual data to a country level (ex. percentage of population living in rural areas by country, percentage of people from minority x by country)
 
 Run random forest/gradient boosting/logistic regression with leave-one-out cross validation
 
+## Aggregating individual data to country level
+
+We should be builiding a dataframe with 28 rows (1 per country), but many variables (ex, percentage of christian people by country, percentage of very satisfied with lives people by country, percentage of people that belong to the roma minority etc.; our target variable would become % of people that support trans_docs by country)
+
+## Logistic
 
 
-## Brad's theory notes
+
+## Random forest
+
+
+
+## Gradient boosting
+
+
+# Brad's theory notes
 
 Leaving this section here, it is to be deleted as we incorporate what we need from here into the explanatory model part
 
