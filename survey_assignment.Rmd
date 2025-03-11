@@ -1635,7 +1635,7 @@ colSums(is.na(data))
 colSums(is.na(final_data))
 
 ```
-WE STILL HAVE NAs i don't understand why:(
+--> WE STILL HAVE NAs i don't understand why:(
 
 
 To be done...
