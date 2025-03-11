@@ -266,7 +266,7 @@ Surprisingly, the two indexes have a very weak positive correlation. While they 
 not inverse, I was expecting them to measure opposite things, so maybe the correlation
 coefficient is not useful here because of the low variation of both variables (specially
 GDI).
-I don't know what else to do with this info other than keeping GII and discarding GII.
+I don't know what else to do with this info other than keeping GII and discarding GDI.
 ```{r}
 gender_index <- gender_index |> 
   select(-gender_development_index)
@@ -297,10 +297,7 @@ democracy_index <- democracy_index |>
 
 str(democracy_index)
 ```
-
-In both of these tables (Gender Equality and Democracy indexes) there
-are more indicators apart from the overall indexes, we have to decide if
-we think they're useful or if we can discard some/all of them.
+In this case, we are only keeping the 
 
 ```{r}
 democracy_index <- democracy_index |> 
@@ -1137,6 +1134,42 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = social_class)) +
   ) +
   theme_minimal()
 ```
+Although D63 of the questionnaire measures (oneself's and one's household's) self-perceived social class, it is still a relevant and seemingly divisive variable. We observe a positive correlation, where support grows with increasing (perceived) social class, while explicit lack of support and no response are higher for lower-class individuals.
+
+#### Education
+
+```{r}
+ggplot(data, aes(x = trans_docs, y = years_edu)) +
+  geom_violin() +
+  labs(x = "Support for trans people changing their civil documents", y = "Age when stopped full-time education") +
+  ggtitle("Distribution of support by education")
+```
+COMMENT
+Support doesn't seem to be related to education.
+
+#### Area of residence
+
+```{r}
+data_summary <- data |> 
+  count(trans_docs, community, name = "n") |> 
+  group_by(community) |>  
+  mutate(percentage = n / sum(n))  
+
+ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = community)) +
+  geom_bar(stat = "identity", position = "dodge") +  
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+  scale_y_continuous(labels = percent_format()) + 
+  labs(
+    title = "Distribution of support by area of residence",
+    x = "Support for trans people changing their civil documents",
+    y = "Percentage within area of residence",
+    fill = "area of residence"
+  ) +
+  theme_minimal()
+```
+COMMENT
+Support does not vary much by area of residence.
 
 ### Having trans friends
 
@@ -1165,7 +1198,49 @@ Having trans friends is associated with a higher support, while those who refuse
 
 ## Country-level data
 
-Nothing yet...
+```{r}
+country_support <- data %>%
+  mutate(
+    trans_docs = case_when(
+      is.na(trans_docs) ~ "DK",
+      trans_docs == "Yes" ~ "1",
+      trans_docs == "No" ~ "2",
+      TRUE ~ as.character(trans_docs)
+    )
+  ) %>%
+  group_by(country, trans_docs = trans_docs) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(country) %>%
+  mutate(proportion = (count / sum(count))*100) %>%
+  ungroup()
+
+ggplot(country_support, aes(x = factor(country, levels = country_support %>%
+                                       filter(trans_docs == "1") %>%
+                                       arrange(desc(proportion)) %>%
+                                       pull(country)), 
+                           y = proportion,
+                           fill = factor(trans_docs, levels = c("1", "2", "DK")))) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  scale_fill_manual(values = c("1" = "#497ba9", "2" = "#d56e6e", "DK" = "#9a9595"),
+                   name = "",
+                   labels = c("Yes", "No", "Don't know")) +
+  geom_text(aes(label = round(proportion)), 
+          position = position_stack(reverse = TRUE, vjust = 0.5),
+          size = 3.5, color = "white") +
+  labs(
+    title = "QC9: Do you think transgender persons should be able to change their civil documents to match their inner gender identity?",
+    x = "", 
+    y = ""
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        plot.title = element_text(size = 9),
+        panel.grid.major.y = element_blank(),
+        legend.position = "bottom")
+```
+
 
 ## Paradata
 
