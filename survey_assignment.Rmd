@@ -38,11 +38,13 @@ library(kableExtra)
 library(gmodels)
 library(flexplot)
 library(corrplot)
+library(DescTools)
 library(caret)
 library(ROSE)
 library(randomForest)
 library(pROC)
 library(mice)
+library(glmnet)
 ```
 
 # Loading data
@@ -71,7 +73,7 @@ Retrieved from the World Bank
 2019.
 
 ```{r}
-gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4)
+gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4, show_col_types = FALSE)
 
 head(gdp_data)
 
@@ -340,6 +342,20 @@ In this case, we are only keeping the
 ```{r}
 democracy_index <- democracy_index |> 
   select(country_name, country_code, democracy_index)
+```
+
+#### Joining all country-level data together
+
+```{r}
+country_level_data <- codelist |> 
+  select(iso3c, iso2c) |> 
+  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
+  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
+  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
+  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
+  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
+  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
+str(country_level_data)
 ```
 
 # Data cleaning
@@ -985,29 +1001,6 @@ data <- data |>
   select(-c("disc_where", "disc_contact"))
 ```
 
-# Joining together country-level data
-
-```{r}
-country_level_data <- codelist |> 
-  select(iso3c, iso2c) |> 
-  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
-  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
-  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
-  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
-  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
-  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
-str(country_level_data)
-```
-
-Not using paradata for now. We can discuss how to use it
-
-```{r}
-complete_df <- data |> 
-  left_join(country_level_data, 
-            by = join_by(country == iso2c)) |> 
-  select(-c(country.y, iso3c))
-```
-
 # Exploratory Data Analysis
 
 Plotting the distribution of the numeric variables
@@ -1377,22 +1370,6 @@ ggplot(country_long, aes(y = value, x = variable)) +
         axis.ticks.x = element_blank())
 ```
 
-Histograms of scaled country data:
-
-```{r}
-# scaled_data <- country_level_data %>%
-#   select(-iso3c, -iso2c, -country) %>%
-#   mutate(across(everything(), scale)) %>%  # Standardize all variables
-#   pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
-# 
-# # Plot histograms
-# ggplot(scaled_data, aes(x = value)) +
-#   geom_histogram(fill = "lightblue", bins = 17) +
-#   facet_wrap(~variable, scales = "free_y") +
-#   theme_minimal() +
-#   labs(title = "Distribution of scaled country-level Variables", x = "Standardized Value", y = "Count")
-```
-
 ```{r}
 country_level_data <- country_level_data %>%
   inner_join(trans_docs_prop, by = c("iso2c" = "country"))
@@ -1406,6 +1383,8 @@ corrplot(cor_matrix, method = "color", type = "upper",
          addCoef.col = "black", tl.col = "black",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
+
+Some heavy correlations which is a little worrying, but as we are going to use these data to build cross-level interactions, this should not compromise the reliability of our analysis too much.
 
 ## Paradata
 
@@ -1607,7 +1586,7 @@ Our target variable has a 60/40 distribution so we are not worried about class i
 
 Less represented classes in other variables have already been aggregated if deemed necessary.
 
-# Analysis of missing values.
+# Analysis of missing values
 
 Here we analyse the NA reponses to our target variable. This is a sort
 of robustness check to understand our data and learn if there are
@@ -1714,8 +1693,7 @@ factor_subset <- dk_target %>%
   dplyr::select(target_NA, where(is.factor)) |> 
   mutate(target_NA = factor(target_NA))
 
-### Run cramers V for factors
-library(DescTools)
+# Run cramers V for factors
 
 target_var <- "target_NA"
 factor_variables <- names(factor_subset)
@@ -1996,38 +1974,64 @@ colSums(is.na(final_data))
 
 final_data <- final_data |> 
   cbind(data$trans_docs) |> 
-  rename("trans_docs" = "data$trans_docs")
+  cbind(data$country) |>
+  rename("trans_docs" = "data$trans_docs",
+         "country" = "data$country") |> 
+  relocate(country, .before = everything())
 ```
---> WE STILL HAVE NAs i don't understand why:(
 
+# Joining together all our data
 
-To be done...
+`country_level_data` stores all our data defined at the country level. 
+
+`final_data` stores all our data (after imputation) for individual level variables.
+
+```{r}
+complete_df <- final_data |> 
+  left_join(country_level_data, 
+            by = join_by(country == iso2c)) |> 
+  select(-c(country.y, iso3c))
+```
 
 # Explanatory model
 
-To be done...
+To be finished...
 
-Idea was; run a stepwise with all individual data, get back important
-variables and then run a mixed model adding country level variables
+1) Run logistic with all variables and extract only the significant variables
+
+2) Confirm this is similar to the results we obtain using stepwise regression/lasso regularization
+
+3) Based on 1 & 2 decide which individual level variables to include in the mixed model
+
+4) Build the mixed model (look at the mixed model section for further details on how this needs to be built)
 
 ### Simple logistic regression
 
 I am using only individual level data for now
 
-Example below can also be done with less variables to ensure readibility
-
 ```{r}
-datalr <- data |> 
-  # Dropping all NAs for now (glm does this automatically already)
+datalr <- final_data |> 
+  # Dropping NAs (there should be NAs only in our target variable)
   drop_na() |> 
   # Selecting only predictor variables
-  select(-c("serialid", "country"))
-# Notice df goes from 27k observations to 17k observations 
-
+  select(-"country") |> 
+  # Scale variables 
+  mutate(across(where(is.numeric), scale))
+  
 simple_logistic <- glm(trans_docs ~ ., data = datalr, family = binomial(link = "logit"))
-summary(simple_logistic)
-# Scaling needed? If so where it should be done?
+
+# Save the summary
+logistic_summary <- summary(simple_logistic)
+
+# Get all the p-values
+p_values <- logistic_summary$coefficients[, 4]
+
+# Extract the significant ones
+significant_var <- p_values[p_values < 0.05]
+significant_var
 ```
+
+GENERAL COMMENTS AND USEFUL CODE ABOUT LOGISTIC
 
 No support are 1s basically and support are 0s.
 
@@ -2046,8 +2050,17 @@ head(coef(simple_logistic))
 
 # for their interpretation
 head(exp(coef(simple_logistic)))
-# The exponential of the slope coefficient (exp(B)) tells us the factor by which odds increase if the independent variable increases by one unit?
 ```
+
+`coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
+
+`exp(coef(simple_logistic))`: the exponential of the slope coefficient (exp(B)) tells us the change of the odds if the independent variable increases by one unit
+
+If the data is scaled:
+
+A coefficient B (from a logistic regression) now reflects the change in the log-odds for a one standard deviation increase in the predictor variable, rather than a one-unit increase in the original scale.
+
+The odds ratio (exp(B)) now tells you how the odds change with a one standard deviation increase in the predictor variable, rather than a one-unit increase.
 
 ```{r}
 # AIC of model
@@ -2071,7 +2084,7 @@ confusionMatrix(as.factor(datalr$trans_docs), as.factor(predicted_classes))
 ```{r}
 roc_obj <- roc(datalr$trans_docs, predicted_probs)
 
-#Terrible graphs, do we have better ones?
+# Terrible graphs, do we have better ones?
 pROC::ggroc(roc_obj)
 plot(roc_obj)
 
@@ -2082,18 +2095,35 @@ auc(datalr$trans_docs, predicted_probs)
 
 ## Stepwise regression
 
+Chooses the best model based on the lowest AIC achievable
+
 ```{r}
-stepAIC <- step(simple_logistic, direction = "both")
+set.seed(123)
+stepAIC <- step(simple_logistic, direction = "both", trace=0)
 stepAIC
 ```
 
-Should we use OLS instead of Stepwise?
+## Lasso regularization
 
-Also we can check coherence of Stepwise results with simple logistic regression's results
+```{r}
+# Convert data into a matrix for glmnet
+x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
+y_lasso <- as.matrix(datalr$trans_docs)
+
+# Fit the Lasso model (alpha = 1 for Lasso regularization)
+lasso_model <- cv.glmnet(x_lasso, y_lasso, family = "binomial", alpha = 1)
+
+# Get all the coefficients
+coefficients <- coef(lasso_model, s = "lambda.min")
+
+# Filter for the non-zero ones
+non_zero_features <- rownames(coefficients)[which(coefficients != 0)]
+non_zero_features
+```
+
+It might not be the best with factors, but it could be useful with numeric
 
 ## Mixed model
-
-<https://favstats.github.io/intro_multilevel/slides/#1>
 
 Random Intercept Model:
 
@@ -2102,6 +2132,8 @@ Allows the baseline level (intercept) to vary across groups. Assumes the relatio
 In R syntax: y ~ x + (1|group)
 
 Example: Different schools might have different average test scores (random intercepts), but the effect of study hours on test scores is the same across all schools
+
+<br>
 
 Random Slope Model:
 
@@ -2113,6 +2145,8 @@ Example: The effect of study hours on test scores might be stronger in some scho
 
 Random intercept models account for different baselines between groups, while random slope models account for different relationships between predictors and outcomes across groups. When both random intercepts and slopes are included, you're allowing both the baseline and the effect of predictors to vary by group.
 
+<br>
+
 Interactions between group-level (higher-level) variables and individual-level (lower-level) variables in mixed models are called cross-level interactions.
 
 Cross-level interactions are particularly useful in multilevel research because they help you understand how the relationship between an individual-level predictor and the outcome varies as a function of a group-level characteristic.
@@ -2120,11 +2154,11 @@ Cross-level interactions are particularly useful in multilevel research because 
 For example, in educational research: 1) Individual level: student characteristics (study time, prior knowledge). 2) Group level: school or classroom characteristics (class size, teaching method). 3) Cross-level interaction: Does the effect of study time on performance depend on class size?
 
 ```{r}
+# Switching to df containing both individual and country level
 complete_df <- complete_df |> 
-  drop_na() |> 
-  select(-"serialid")
+  drop_na() # should only be in our target
 
-# Scaling the variables speeds up the running time. However we loose interpretation?
+# Scaling the variables speeds up the running time. However we loose interpretation? maybe the best thing to do is to center them rather than scaling?
 scaled_df <- complete_df |>
   mutate(across(where(is.numeric), scale))
 
@@ -2134,13 +2168,10 @@ glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequ
 #variable1:variable2 includes only the interaction
 #+ (1|country) country is the grouping variable, means it includes different intercepts for each country
 
-summary(glmer_model)
+summary(glmer_model) # print in better tables as Marga likes
 
 # Need to calculate intra class coefficient (proportion of variation explained by the grouping level)
 
-
-library(texreg)
-htmlreg(glmer_model)
 ```
 
 The idea is to run interactions between individual level variables and country level variables choosing pair which make sense (ex. does the effect of being female on support for trans docs depend on the gender equality index? --> did this by doing gender*gender_inequality_index)
@@ -2339,12 +2370,12 @@ to the previous one.
 First, null model:
 
 ```{r}
-m_null <- glmer(trans_docs ~ (1|country),
-               data = complete_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
-summary(m_null)
+# m_null <- glmer(trans_docs ~ (1|country),
+#                data = complete_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+# summary(m_null)
 ```
 
 To come back and reinterpret... don't really know at this stage.
@@ -2376,41 +2407,41 @@ Random effects model
 -   Including individual level variables only with country:
 
 ```{r}
-n_randeffect <- glmer(trans_docs ~ 
-                        gender + age + I(age^2) + life_sat + religion + social_class + 
-                        (1|country),
-               data = complete_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
+# n_randeffect <- glmer(trans_docs ~ 
+#                         gender + age + I(age^2) + life_sat + religion + social_class + 
+#                         (1|country),
+#                data = complete_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
 ```
 
 This suggests the data needs to be rescaled, to check which variables
 are the issue:
 
 ```{r}
-# check for nearzero variance, if so those could be removed
-nearZeroVar(complete_df, saveMetrics = TRUE)
-# see no issues. So all variables stay.
-
-# will recode the numeric variables I selected, which is only age
-scaled_df <- complete_df |>
-  mutate(across(where(is.numeric), scale))
+# # check for nearzero variance, if so those could be removed
+# nearZeroVar(complete_df, saveMetrics = TRUE)
+# # see no issues. So all variables stay.
+# 
+# # will recode the numeric variables I selected, which is only age
+# scaled_df <- complete_df |>
+#   mutate(across(where(is.numeric), scale))
 ```
 
 Re check the random effects model with scaled data:
 
 ```{r}
-n_randeffect <- glmer(trans_docs ~
-                        gender + age + I(age^2) + life_sat + (1|country),
-               data = scaled_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
-
-
-
-summary(n_randeffect)
+# n_randeffect <- glmer(trans_docs ~
+#                         gender + age + I(age^2) + life_sat + (1|country),
+#                data = scaled_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+# 
+# 
+# 
+# summary(n_randeffect)
 ```
 
 Can we interpret this...
