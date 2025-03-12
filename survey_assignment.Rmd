@@ -15,7 +15,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Loading libraries
 
-```{r, message = FALSE}
+```{r, message = FALSE, warning=FALSE}
 rm(list = ls())
 library(MASS)
 library(tidyverse)
@@ -38,7 +38,13 @@ library(kableExtra)
 library(gmodels)
 library(flexplot)
 library(corrplot)
+library(DescTools)
+library(caret)
+library(ROSE)
+library(randomForest)
+library(pROC)
 library(mice)
+library(glmnet)
 ```
 
 # Loading data
@@ -53,7 +59,7 @@ data_raw <- read_dta("ZA7575.dta")
 
 This is for joins:
 
-```{r}
+```{r, message=FALSE}
 # building a df with country names and codes for the EU-28
 codelist <- countrycode::codelist |> 
   select(country.name.en, iso.name.en, un.name.en, cow.name, ecb, eurostat, iso2c, iso3c, eu28) |> 
@@ -67,7 +73,7 @@ Retrieved from the World Bank
 2019.
 
 ```{r}
-gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4)
+gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4, show_col_types = FALSE)
 
 head(gdp_data)
 
@@ -336,6 +342,20 @@ In this case, we are only keeping the
 ```{r}
 democracy_index <- democracy_index |> 
   select(country_name, country_code, democracy_index)
+```
+
+#### Joining all country-level data together
+
+```{r}
+country_level_data <- codelist |> 
+  select(iso3c, iso2c) |> 
+  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
+  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
+  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
+  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
+  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
+  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
+str(country_level_data)
 ```
 
 # Data cleaning
@@ -613,10 +633,10 @@ Will now look into the labels for the different levels that our factor
 variables can take:
 
 ```{r}
-attr(data$d11r1, "labels")
-names(attr(data$d11r1, "labels"))
-tibble(name_labels = names(attr(data$d11r1, "labels")),
-       labels = attr(data$d11r1, "labels"))
+attr(data$d70, "labels")
+names(attr(data$d70, "labels"))
+tibble(name_labels = names(attr(data$d70, "labels")),
+       labels = attr(data$d70, "labels"))
 
 # Create a list of tibbles containing the labels and their associated name for each variable
 list_label_tibbles <- 
@@ -634,7 +654,7 @@ list_label_tibbles <-
 list_label_tibbles <- setNames(list_label_tibbles, names(data))
 
 # For example
-list_label_tibbles$d11r1
+list_label_tibbles$d70
 ```
 
 Right column is what it appears in our data (as a number). Left column
@@ -891,20 +911,20 @@ nonetheless we keep this level because it makes sense
 data |> count(social_class)
 ```
 
-Given the low number of observations in some categories and the high
-number of categories we opt to aggregate some of them, otherwise we risk
-too much noise in our models.
+Given the low number of observations in some categories of the variable `religion` and the high number of categories we opt to aggregate some of them, otherwise we risk too much noise in our models.
 
 ```{r}
 data |> count(religion)
+
+# Checking if the means of groups we are going to aggregate are similar
 data |> 
   mutate(trans_docs=as.numeric(trans_docs)) |> 
   summarise(mean = mean(trans_docs, na.rm=TRUE), .by = religion) |>
   arrange(mean)
+
 # We are going to group together atheist with agnostic
 # We are also going to put sikh, buddhists, jewish and hindu into the other category
 # Finally we are going to group together all muslims
-
 data <- data |> 
   mutate(religion = fct_collapse(religion,
                                 "Non-believers" = c("Atheist", "Non believer or agnostic"),
@@ -915,7 +935,7 @@ data <- data |>
 data |> count(religion)
 ```
 
-### Missing values
+### Recoding missing values
 
 Now we will substitute de "Refusal" answers in the remaining variables
 as NAs. If the respondent refuses to answer it's equivalent to not
@@ -979,98 +999,6 @@ it does not add meaningful information to our analysis
 ```{r}
 data <- data |> 
   select(-c("disc_where", "disc_contact"))
-```
-
-# Aggregating country-level data
-
-```{r}
-country_level_data <- codelist |> 
-  select(iso3c, iso2c) |> 
-  left_join(gdp_data, by = c("iso3c" = "country_code")) |> 
-  # left_join(rural_data, by = c("iso3c" = "country_code")) |> rural population data will probably be discarded
-  left_join(gender_index, by = c("iso3c" = "country_iso_code")) |> 
-  left_join(lgbt_rights_index, by = c("iso3c" = "country_code")) |> 
-  left_join(democracy_index, by = c("iso3c" = "country_code")) |> 
-  select(-contains("country_")) # removing all duplicated country_name columns that were joined from each data frame
-str(country_level_data)
-```
-
-I thought by aggregating we meant synthesizing the information from the
-individual respondents into country-level variables? but I don't know if
-this is something that models do directly.
-
-My approach was using means for numeric variables:
-
-```{r}
-names(select(data, where(is.numeric)))
-
-data_num <- data %>%
-  select(-serialid) |> 
-  group_by(country) %>%
-  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
-```
-
-As well as for dummies:
-
-```{r}
-# searching for factor variables with two levels
-dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
-dummy_names
-
-dummy_levels <- lapply(data[dummy_names], levels)
-dummy_levels
-
-data_dummy <- data %>%
-  select(country, all_of(dummy_names)) %>%
-  mutate(across(all_of(dummy_names),
-                ~ case_when(
-                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
-                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
-                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
-                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
-                ),
-                .names = "{.col}_num"))
-```
-
-I converted factors with 2 levels to numerical 0-1 so we can compute
-their means.
-
-```{r}
-data_dummy <- data_dummy %>%
-  group_by(country) %>%
-  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
-
-# substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
-data_dummy <- data_dummy %>%
-  rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
-```
-
-Now we can join the two datasets:
-
-```{r}
-data_aggr <- data_num %>%
-  left_join(data_dummy, by = "country")
-```
-
-The next variables are not numeric nor factor with 2 levels, so they are
-not included in data_aggr:
-
-```{r}
-names(data)[!sapply(data, is.numeric) &
-              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
-```
-
-///////
-
-Not using paradata for now. We can discuss how to use it
-
-```{r}
-complete_df <- data |> 
-  left_join(country_level_data, 
-            by = join_by(country == iso2c)) |> 
-  select(-c(country.y, iso3c))
-
-str(complete_df)
 ```
 
 # Exploratory Data Analysis
@@ -1205,11 +1133,9 @@ CrossTable(data$religion, data$trans_docs,
            format = "SPSS")
 ```
 
-Out of all observations Catholic, Atheists/Agnostic, Orthodox Christians
+Out of all observations Catholic, non-believers, Orthodox Christians
 and Protestants sum up to the 81.04% of our sample, being the rest
-underrepresented. I believe the warning "Chi-squared approximation may
-be incorrect" is because of this. Consequently I don't know if we can
-trust the p-value.
+underrepresented.
 
 ```{r}
 data_summary <- data |> 
@@ -1295,7 +1221,7 @@ ggplot(data, aes(x = trans_docs, y = years_edu)) +
   ggtitle("Distribution of support by education")
 ```
 
-COMMENT Support doesn't seem to be related to education.
+Support doesn't seem to be related to education.
 
 #### Area of residence
 
@@ -1319,9 +1245,11 @@ ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = community)) +
   theme_minimal()
 ```
 
-COMMENT Support does not vary much by area of residence.
+Support does not vary much by area of residence.
 
-### Having trans friends
+### Other individual-level variables
+
+#### Having trans friends
 
 ```{r}
 data_summary <- data |> 
@@ -1442,24 +1370,7 @@ ggplot(country_long, aes(y = value, x = variable)) +
         axis.ticks.x = element_blank())
 ```
 
-Histograms of scaled country data:
-
 ```{r}
-# scaled_data <- country_level_data %>%
-#   select(-iso3c, -iso2c, -country) %>%
-#   mutate(across(everything(), scale)) %>%  # Standardize all variables
-#   pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
-# 
-# # Plot histograms
-# ggplot(scaled_data, aes(x = value)) +
-#   geom_histogram(fill = "lightblue", bins = 17) +
-#   facet_wrap(~variable, scales = "free_y") +
-#   theme_minimal() +
-#   labs(title = "Distribution of scaled country-level Variables", x = "Standardized Value", y = "Count")
-```
-
-```{r}
-
 country_level_data <- country_level_data %>%
   inner_join(trans_docs_prop, by = c("iso2c" = "country"))
 
@@ -1472,6 +1383,8 @@ corrplot(cor_matrix, method = "color", type = "upper",
          addCoef.col = "black", tl.col = "black",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
+
+Some heavy correlations which is a little worrying, but as we are going to use these data to build cross-level interactions, this should not compromise the reliability of our analysis too much.
 
 ## Paradata
 
@@ -1584,7 +1497,7 @@ cor_matrix <- cor(data %>%
                   use = "complete.obs")
 
 corrplot(cor_matrix, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
+         tl.col = "black",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 
 
@@ -1593,7 +1506,7 @@ cor_filtered <- ifelse(abs(cor_matrix) >= 0.7, cor_matrix, NA)
 
 # Graph
 corrplot(cor_filtered, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
+         tl.col = "black", 
          col = colorRampPalette(c("blue", "white", "red"))(200),
          na.label = " ",
          insig = "blank") 
@@ -1623,25 +1536,22 @@ cor_matrix <- cor(data %>%
 
 
 corrplot(cor_matrix, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
+         tl.col = "black",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
 
 We realize our new variables are still highly correlated between them. For reducing the dimensionality of the dataset even more while preserving information we create one single variable for general minority discrimination.
 
 ```{r}
-
 # Creating grouped variable
 data <- data %>%
   mutate(
     minority_discri = rowMeans(select(., racial_discri, sexual_discri, religious_discri, disability_discri), na.rm = TRUE)) 
-
 ```
 
 We decided to exclude white_discri, atheist_discri, christian_discri because we realized they had a median of 1 and a quite small mean, meaning there is almost no reported discrimination against these groups in the dataset.
 
 ```{r}
-
 summary(data$white_discri)
 summary(data$atheist_discri)
 summary(data$christian_discri)
@@ -1650,7 +1560,9 @@ data <- data |>
   select(-c(white_discri, atheist_discri, christian_discri, racial_discri, sexual_discri, religious_discri, disability_discri))
 
 ```
+
 Final check of the correlation matrix to confirm that multicollinearity has been reduced.
+
 ```{r}
 cor_matrix <- cor(data %>%
                     select_if(is.numeric) %>%
@@ -1665,9 +1577,16 @@ corrplot(cor_matrix, method = "color", type = "upper",
 
 # Class imbalance
 
-Some words about class imbalance? Needed?
+```{r}
+prop.table(table(data$trans_docs, useNA = "ifany"))
+prop.table(table(data$trans_docs, useNA = "no"))
+```
 
-# Analysis of missing values.
+Our target variable has a 60/40 distribution so we are not worried about class imbalance.
+
+Less represented classes in other variables have already been aggregated if deemed necessary.
+
+# Analysis of missing values
 
 Here we analyse the NA reponses to our target variable. This is a sort
 of robustness check to understand our data and learn if there are
@@ -1774,8 +1693,7 @@ factor_subset <- dk_target %>%
   dplyr::select(target_NA, where(is.factor)) |> 
   mutate(target_NA = factor(target_NA))
 
-### Run cramers V for factors
-library(DescTools)
+# Run cramers V for factors
 
 target_var <- "target_NA"
 factor_variables <- names(factor_subset)
@@ -1860,14 +1778,14 @@ dk_fit_null <- glm(target_NA ~ 1,
               data = dk_target, 
               family = "binomial")
 # run full fit model of most correlated vars with country (also age^2 for good practice)
-dk_fit <- glm(target_NA ~ lgb_discri + gender + age + I(age*age) + antilgbtq_rights + internet_use + social_class + country_name, 
+dk_fit <- glm(target_NA ~ gender + age + I(age*age) + antilgbtq_rights + internet_use + social_class + country_name, 
               data = dk_target, 
               family = "binomial")
 
 # use stepwise to select best mode l
 aic_1 <- MASS::stepAIC(dk_fit, scope = list(upper = dk_fit, 
                              lower = dk_fit_null),
-        direction = "both", k = 2) # forward based on p-value
+        direction = "both", k = 2, trace=0) # forward based on AIC
 
 # filter vars significant at 5% and calculate exponential
 broom::tidy(aic_1) |> 
@@ -1906,7 +1824,7 @@ maybe good to include if we aren't doing in other sections.
 ```{r}
 # split to test and training
 na_model <- glm(target_NA ~ .,
-                      data = dk_target2, 
+                      data = dk_target, 
                       family = "binomial")
 summary(na_model)
 broom::tidy(na_model)
@@ -1919,11 +1837,10 @@ Approach to test relationship to DK with splitting and undersampling:
 ```{r}
 # create new dataset with just vars we want, including age^2
 dk_target2 <- dk_target |> 
-  select(target_NA, lgb_discri, age, antilgbtq_rights, internet_use, social_class, country_name) |> 
+  select(target_NA, age, antilgbtq_rights, internet_use, social_class, country_name) |> 
   mutate(age_sq = age*age, .after = age)
 
 # to deal with some class imbalance, undersample from the majority group (NA = 0)
-library(caret)
 set.seed(123)
 # Generate an index
 index <- createDataPartition(dk_target2$target_NA, p = 0.7, list = FALSE, times = 1)
@@ -1940,7 +1857,6 @@ Now undersample the majority
 
 ```{r}
 set.seed(123)
-library(ROSE)
 under <- ovun.sample(target_NA~., 
                      data=train, 
                      method = "under", 
@@ -1950,7 +1866,6 @@ under <- ovun.sample(target_NA~.,
 table(under$target_NA)
 
 #run the rf model 
-library(randomForest)
 rfunder <- randomForest(target_NA~., data=under)
 rfunder
 ```
@@ -2039,98 +1954,84 @@ odds ratios here are very high.
 
 # Imputing missing data
 
-lo hago con left right porque es la que mas nos interesa imputar, para decidir qué metodo usar. Uso mice (pmm random forest, porque es factor )
+As we have different types of variables we decide to go with the default methods. Selecting the best method for each type of variable would be too computationally intensive
 
 ```{r}
+# Excluding target variable and other useless variables
+imputation_data <- data |> 
+  select(-c(serialid, country, trans_docs))
 
-mice_imputed <- data.frame(
-  original = data$left_right,
-  imputed_pmm = complete(mice(data, m=1, method = "pmm", seed=123))$left_right, # We write an m=1 so that it doesn't take that long
-  imputed_rf = complete(mice(data, m=1, method = "rf", seed=123))$left_right)
+# Running it with the default methods
+# We can change m in case we decide to use pool later instead of just completing 1 df)
+imputed_data <- mice(imputation_data, m = 1, seed=1234)
+# By default: numerical variables -> pmm, binary factors -> logreg, > 2 levels factors -> polyreg
+imputed_data$method
 
-
-# Define variables, titles, and colors for the updated set of distributions
-variables <- c("original", "imputed_pmm", "imputed_rf")
-titles <- c("Distribution of the left_right variable", "PMM-imputed distribution", "RF-imputed distribution")
-colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9")
-colors_border <- c("skyblue3", "#808080", "#808080")
-
-# Transform data to long format for ggplot
-mice_imputed_long <- mice_imputed %>%
-  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
-
-# Facet wrap
-mice_imputed_long %>%
-  mutate(title = factor(method, levels = variables, labels = titles)) %>%
-  ggplot(aes(x = value, fill = title)) +
-  geom_bar(color = "#808080", position = "identity", alpha = 0.7, stat = "count") +  # Cambio importante aquí
-  facet_wrap(~title, scales = "free_y") +
-  scale_fill_manual(values = colors_fill) +
-  theme_classic() +
-  theme(legend.position = "none") +
-  labs(title = "Comparison of Left-Right Imputation Methods",
-       x = "Left-Right Categories",
-       y = "Count")
-
-```
-
-They seem to perform almost the same. We will go with pmm.
-
-```{r}
-# Get the number of columns in the dataset
-num_cols <- ncol(data)
-
-# Define the imputation method for each column
-method_vector <- rep("pmm", num_cols)  # Use "pmm" for all columns
-
-# Identify the position of the target variable
-target_variable <- "trans_docs"
-target_position <- which(names(data) == target_variable)
-
-# Do not impute the target variable
-method_vector[target_position] <- ""  # Leave this position blank
-
-# Perform imputation without modifying the target variable
-imputed_data <- mice(data, method = method_vector, m = 1, seed = 123)
-
-# Get the fully imputed dataset
 final_data <- complete(imputed_data)
 
-
-colSums(is.na(data))
+colSums(is.na(imputation_data))
 colSums(is.na(final_data))
 
+final_data <- final_data |> 
+  cbind(data$trans_docs) |> 
+  cbind(data$country) |>
+  rename("trans_docs" = "data$trans_docs",
+         "country" = "data$country") |> 
+  relocate(country, .before = everything())
 ```
---> WE STILL HAVE NAs i don't understand why:(
 
+# Joining together all our data
 
-To be done...
+`country_level_data` stores all our data defined at the country level. 
+
+`final_data` stores all our data (after imputation) for individual level variables.
+
+```{r}
+complete_df <- final_data |> 
+  left_join(country_level_data, 
+            by = join_by(country == iso2c)) |> 
+  select(-c(country.y, iso3c))
+```
 
 # Explanatory model
 
-To be done...
+To be finished...
 
-Idea was; run a stepwise with all individual data, get back important
-variables and then run a mixed model adding country level variables
+1) Run logistic with all variables and extract only the significant variables
+
+2) Confirm this is similar to the results we obtain using stepwise regression/lasso regularization
+
+3) Based on 1 & 2 decide which individual level variables to include in the mixed model
+
+4) Build the mixed model (look at the mixed model section for further details on how this needs to be built)
 
 ### Simple logistic regression
 
 I am using only individual level data for now
 
-Example below can also be done with less variables to ensure readibility
-
 ```{r}
-data <- data |> 
-  # Dropping all NAs for now (glm does this automatically already)
+datalr <- final_data |> 
+  # Dropping NAs (there should be NAs only in our target variable)
   drop_na() |> 
   # Selecting only predictor variables
-  select(-c("serialid", "country"))
-# Notice df goes from 27k observations to 17k observations 
+  select(-"country") |> 
+  # Scale variables 
+  mutate(across(where(is.numeric), scale))
+  
+simple_logistic <- glm(trans_docs ~ ., data = datalr, family = binomial(link = "logit"))
 
-simple_logistic <- glm(trans_docs ~ ., data = data, family = binomial(link = "logit"))
-summary(simple_logistic)
-# Scaling needed? If so where it should be done?
+# Save the summary
+logistic_summary <- summary(simple_logistic)
+
+# Get all the p-values
+p_values <- logistic_summary$coefficients[, 4]
+
+# Extract the significant ones
+significant_var <- p_values[p_values < 0.05]
+significant_var
 ```
+
+GENERAL COMMENTS AND USEFUL CODE ABOUT LOGISTIC
 
 No support are 1s basically and support are 0s.
 
@@ -2138,58 +2039,144 @@ From documentation: "the first level denotes failure and all others
 success".
 
 ```{r}
-levels(data$trans_docs)
+levels(datalr$trans_docs)
 # Yes = failure = 0
 # No = success = 1
 ```
 
 ```{r}
 # all the coefficients
-coef(simple_logistic)
+head(coef(simple_logistic))
 
 # for their interpretation
-exp(coef(simple_logistic))
-# The exponential of the slope coefficient (exp(B)) tells us the factor by which odds increase if the independent variable increases by one unit?
+head(exp(coef(simple_logistic)))
 ```
+
+`coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
+
+`exp(coef(simple_logistic))`: the exponential of the slope coefficient (exp(B)) tells us the change of the odds if the independent variable increases by one unit
+
+If the data is scaled:
+
+A coefficient B (from a logistic regression) now reflects the change in the log-odds for a one standard deviation increase in the predictor variable, rather than a one-unit increase in the original scale.
+
+The odds ratio (exp(B)) now tells you how the odds change with a one standard deviation increase in the predictor variable, rather than a one-unit increase.
 
 ```{r}
 # AIC of model
 simple_logistic$aic
 
 #predicted probabilities of being a 1 (i.e. a refusal of possibility of trans doc)
-simple_logistic$fitted.values
+predicted_probs <- simple_logistic$fitted.values
 # same by running
 predicted_probs <- predict(simple_logistic, type = "response")
+head(predicted_probs)
 
 # Turning them to classes using custum threshold
 predicted_classes <- ifelse(predicted_probs > 0.5, "No", "Yes")
+head(predicted_classes)
 ```
 
 ```{r}
-library(caret)
-confusionMatrix(as.factor(data$trans_docs), as.factor(predicted_classes))
+confusionMatrix(as.factor(datalr$trans_docs), as.factor(predicted_classes))
 ```
 
 ```{r}
-library(pROC)
-roc_obj <- roc(data$trans_docs, predicted_probs)
+roc_obj <- roc(datalr$trans_docs, predicted_probs)
 
-#Terrible graphs, do we have better ones?
+# Terrible graphs, do we have better ones?
 pROC::ggroc(roc_obj)
 plot(roc_obj)
 
 coords(roc_obj, "best")
 
-auc(data$trans_docs, predicted_probs)
+auc(datalr$trans_docs, predicted_probs)
 ```
 
 ## Stepwise regression
 
+Chooses the best model based on the lowest AIC achievable
+
 ```{r}
-library(MASS)
-stepAIC <- step(simple_logistic, direction = "both")
+set.seed(123)
+stepAIC <- step(simple_logistic, direction = "both", trace=0)
 stepAIC
 ```
+
+## Lasso regularization
+
+```{r}
+# Convert data into a matrix for glmnet
+x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
+y_lasso <- as.matrix(datalr$trans_docs)
+
+# Fit the Lasso model (alpha = 1 for Lasso regularization)
+lasso_model <- cv.glmnet(x_lasso, y_lasso, family = "binomial", alpha = 1)
+
+# Get all the coefficients
+coefficients <- coef(lasso_model, s = "lambda.min")
+
+# Filter for the non-zero ones
+non_zero_features <- rownames(coefficients)[which(coefficients != 0)]
+non_zero_features
+```
+
+It might not be the best with factors, but it could be useful with numeric
+
+## Mixed model
+
+Random Intercept Model:
+
+Allows the baseline level (intercept) to vary across groups. Assumes the relationship between predictors and outcome (slope) is the same for all groups
+
+In R syntax: y ~ x + (1|group)
+
+Example: Different schools might have different average test scores (random intercepts), but the effect of study hours on test scores is the same across all schools
+
+<br>
+
+Random Slope Model:
+
+Allows the effect of a predictor (slope) to vary across groups. Can be used with or without random intercepts.
+
+In R syntax: y ~ x + (0+x|group) for random slope only, or y ~ x + (1+x|group) for both random intercept and slope
+
+Example: The effect of study hours on test scores might be stronger in some schools than others (random slopes)
+
+Random intercept models account for different baselines between groups, while random slope models account for different relationships between predictors and outcomes across groups. When both random intercepts and slopes are included, you're allowing both the baseline and the effect of predictors to vary by group.
+
+<br>
+
+Interactions between group-level (higher-level) variables and individual-level (lower-level) variables in mixed models are called cross-level interactions.
+
+Cross-level interactions are particularly useful in multilevel research because they help you understand how the relationship between an individual-level predictor and the outcome varies as a function of a group-level characteristic.
+
+For example, in educational research: 1) Individual level: student characteristics (study time, prior knowledge). 2) Group level: school or classroom characteristics (class size, teaching method). 3) Cross-level interaction: Does the effect of study time on performance depend on class size?
+
+```{r}
+# Switching to df containing both individual and country level
+complete_df <- complete_df |> 
+  drop_na() # should only be in our target
+
+# Scaling the variables speeds up the running time. However we loose interpretation? maybe the best thing to do is to center them rather than scaling?
+scaled_df <- complete_df |>
+  mutate(across(where(is.numeric), scale))
+
+glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequality_index + religion*gdp_pc_ppp + (1 | country), data=scaled_df, family=binomial(link="logit"))
+
+#variable1*variable2 includes both the two variables separetely and their interaction
+#variable1:variable2 includes only the interaction
+#+ (1|country) country is the grouping variable, means it includes different intercepts for each country
+
+summary(glmer_model) # print in better tables as Marga likes
+
+# Need to calculate intra class coefficient (proportion of variation explained by the grouping level)
+
+```
+
+The idea is to run interactions between individual level variables and country level variables choosing pair which make sense (ex. does the effect of being female on support for trans docs depend on the gender equality index? --> did this by doing gender*gender_inequality_index)
+
+Let's use our brain and common sense to choose the best combinations
 
 # Predictive model
 
@@ -2208,7 +2195,72 @@ percentage of very satisfied with lives people by country, percentage of
 people that belong to the roma minority etc.; our target variable would
 become % of people that support trans_docs by country)
 
-## Logistic
+Synthesizing the information from the individual respondents into country-level variables? but I don't know if this is something that models do directly.
+
+My approach was using means for numeric variables:
+
+```{r}
+names(select(data, where(is.numeric)))
+
+data_num <- data %>%
+  group_by(country) %>%
+  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
+str(data_num)
+```
+
+As well as for dummies:
+
+```{r}
+# searching for factor variables with two levels
+dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
+dummy_names
+
+dummy_levels <- lapply(data[dummy_names], levels)
+dummy_levels
+
+data_dummy <- data %>%
+  select(country, all_of(dummy_names)) %>%
+  mutate(across(all_of(dummy_names),
+                ~ case_when(
+                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
+                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
+                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
+                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
+                ),
+                .names = "{.col}_num"))
+```
+
+I converted factors with 2 levels to numerical 0-1 so we can compute
+their means.
+
+```{r}
+data_dummy <- data_dummy %>%
+  group_by(country) %>%
+  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+
+# substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
+data_dummy <- data_dummy %>%
+  rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
+str(data_dummy)
+```
+
+Now we can join the two datasets:
+
+```{r}
+data_aggr <- data_num %>%
+  left_join(data_dummy, by = "country")
+```
+
+The next variables are not numeric nor factor with 2 levels, so they are
+not included in data_aggr:
+
+```{r}
+names(data)[!sapply(data, is.numeric) &
+              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+```
+
+
+## Linear regression with LASSO
 
 ## Random forest
 
@@ -2318,12 +2370,12 @@ to the previous one.
 First, null model:
 
 ```{r}
-m_null <- glmer(trans_docs ~ (1|country),
-               data = complete_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
-summary(m_null)
+# m_null <- glmer(trans_docs ~ (1|country),
+#                data = complete_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+# summary(m_null)
 ```
 
 To come back and reinterpret... don't really know at this stage.
@@ -2355,42 +2407,41 @@ Random effects model
 -   Including individual level variables only with country:
 
 ```{r}
-n_randeffect <- glmer(trans_docs ~ 
-                        gender + age + I(age^2) + life_sat + religion + social_class + 
-                        (1|country),
-               data = complete_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
+# n_randeffect <- glmer(trans_docs ~ 
+#                         gender + age + I(age^2) + life_sat + religion + social_class + 
+#                         (1|country),
+#                data = complete_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
 ```
 
 This suggests the data needs to be rescaled, to check which variables
 are the issue:
 
 ```{r}
-library(caret)
-# check for nearzero variance, if so those could be removed
-nearZeroVar(complete_df, saveMetrics = TRUE)
-# see no issues. So all variables stay.
-
-# will recode the numeric variables I selected, which is only age
-scaled_df <- complete_df |>
-  mutate(across(where(is.numeric), scale))
+# # check for nearzero variance, if so those could be removed
+# nearZeroVar(complete_df, saveMetrics = TRUE)
+# # see no issues. So all variables stay.
+# 
+# # will recode the numeric variables I selected, which is only age
+# scaled_df <- complete_df |>
+#   mutate(across(where(is.numeric), scale))
 ```
 
 Re check the random effects model with scaled data:
 
 ```{r}
-n_randeffect <- glmer(trans_docs ~
-                        gender + age + I(age^2) + life_sat + (1|country),
-               data = scaled_df,
-               family = "binomial",
-               control = glmerControl(optimizer = "bobyqa"),
-               nAGQ = 10)
-
-
-
-summary(n_randeffect)
+# n_randeffect <- glmer(trans_docs ~
+#                         gender + age + I(age^2) + life_sat + (1|country),
+#                data = scaled_df,
+#                family = "binomial",
+#                control = glmerControl(optimizer = "bobyqa"),
+#                nAGQ = 10)
+# 
+# 
+# 
+# summary(n_randeffect)
 ```
 
 Can we interpret this...
