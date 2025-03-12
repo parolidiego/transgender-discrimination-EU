@@ -55,7 +55,7 @@ library(glmnet)
 data_raw <- read_dta("ZA7575.dta")
 ```
 
-## Country-level data
+## Country-level data sets
 
 This is for joins:
 
@@ -1186,7 +1186,7 @@ Having trans friends is associated with a higher support, while those
 who refuse to disclose their connections to trans people tend to oppose
 more.
 
-## Country-level data
+## Country-level EDA
 
 Replication of the plot in Marga's document. This is probably not needed
 in the final version of the document.
@@ -1910,6 +1910,7 @@ final_data <- final_data |>
 
 `final_data` stores all our data (after imputation) for individual level variables.
 
+
 ```{r}
 complete_df <- final_data |> 
   left_join(country_level_data, 
@@ -2124,10 +2125,9 @@ respondents into country-level variables.
 
 Using means for numeric variables:
 ```{r}
-names(select(data, where(is.numeric)))
+names(select(final_data, where(is.numeric)))
 
-data_num <- data |> 
-  select(-serialid) |> 
+data_num <- final_data |> 
   group_by(country) |> 
   summarise(across(where(is.numeric), ~mean(.), .names = "mean_{.col}"))
 ```
@@ -2135,19 +2135,19 @@ data_num <- data |>
 As well as for dummies:
 ```{r}
 # searching for factor variables with two levels
-dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
+dummy_names <- names(final_data)[sapply(final_data, is.factor) & sapply(final_data, function(x) length(levels(x)) == 2)]
 dummy_names
 
-dummy_levels <- lapply(data[dummy_names], levels)
+dummy_levels <- lapply(final_data[dummy_names], levels)
 dummy_levels
 
-colSums(is.na(data[dummy_names]))
+colSums(is.na(final_data[dummy_names]))
 ```
 
 After imputations only the target variable should have NAs. 
 
 ```{r}
-data_dummy <- data %>%
+data_dummy <- final_data %>%
   select(country, all_of(dummy_names)) %>%
   mutate(across(all_of(dummy_names),
                 ~ case_when(
@@ -2157,6 +2157,8 @@ data_dummy <- data %>%
                   TRUE ~ NA_real_  # assign NA to other unexpected values
                 ),
                 .names = "{.col}_num"))
+
+colSums(is.na(data_dummy))
 ```
 
 I converted factors with 2 levels to numerical 0-1 so we can compute their means.
@@ -2174,6 +2176,7 @@ data_dummy <- data_dummy %>%
     trans_docs_na = first(trans_docs_na),
     .groups = "drop"
   )
+
 
 summary(data_dummy$trans_docs_na)
 
@@ -2193,18 +2196,18 @@ data_aggr <- data_num %>%
 The next variables are factor with >2 levels:
 
 ```{r}
-factor_names <- names(data)[!sapply(data, is.numeric) &
-              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+factor_names <- names(final_data)[!sapply(final_data, is.numeric) &
+              !(sapply(final_data, is.factor) & sapply(final_data, function(x) length(levels(x)) == 2))]
 factor_names
 
 # checking the levels
-lapply(data[factor_names], levels)
+lapply(final_data[factor_names], levels)
 
 # removing country from the list
 factor_names <- setdiff(factor_names, "country")
 
 # creating the aggregated dataset for factor variables
-data_factors <- data %>%
+data_factors <- final_data %>%
   select(country, all_of(factor_names)) %>%
   drop_na() %>% # DROPPING NAs TO "SIMULATE" IMPUTATION
   pivot_longer(cols = -country, names_to = "variable", values_to = "level") %>%
@@ -2220,9 +2223,7 @@ colSums(is.na(data_factors))
 
 ```
 
-I did several tests and still can't figure out why we are seeing NAs in some columns
-if I explicitly dropped them (twice). I'll come back to this after imputations to 
-see how it changed.
+I didn't figure out where the NAs come from, I have to rethink this.
 
 But for now I guess we can join:
 ```{r}
@@ -2232,9 +2233,8 @@ data_aggr <- data_aggr |>
 dim(data_aggr)
 ```
 
-The resulting data frame has 88 variables, I don't know if we should recode/collapse
-some factor levels if they have few answers, to reduce the number of variables.
-I'll pull imputations and get back to this (Irene).
+The resulting data frame has 28 observations and 76 variables. We might have to
+clean the names of the variables that were glued from variable_level.
 
 
 ## Linear regression with LASSO
@@ -2258,17 +2258,6 @@ Following this tutorial Marga sent and applying to the test data:
 
 Testing a nested dataset by country
 
-```{r}
-complete_df <- data |> 
-  left_join(country_level_data, 
-            by = join_by(country == iso2c)) |> 
-  select(-c(country.y, iso3c))
-
-str(complete_df)
-```
-
-Irene: I brought this df here because Brad's the only one if seen using it, 
-but it's probably outdated.
 
 ```{r}
 # Commented the below as we are probably not gonna use it
