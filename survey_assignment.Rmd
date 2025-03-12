@@ -1931,7 +1931,7 @@ To be finished...
 
 ### Simple logistic regression
 
-I am using only individual level data for now
+I am using only individual level data for now. This is a simple model to see at the global level i.e. no country level control, which variables are significant. The numeric data has also been scaled. 
 
 ```{r}
 datalr <- final_data |> 
@@ -1953,20 +1953,68 @@ p_values <- logistic_summary$coefficients[, 4]
 # Extract the significant ones
 significant_var <- p_values[p_values < 0.05]
 significant_var
+
+# create a tibble to more easily search through significant variables
+tibble(
+  broom::tidy(simple_logistic) |>
+    filter(p.value<0.05) |>
+    mutate(oddsratio = exp(estimate)) |>
+    select(term, oddsratio, p.value)
+)
+
+
 ```
 
-GENERAL COMMENTS AND USEFUL CODE ABOUT LOGISTIC
+#### Interpreting the coefficients of these models: 
 
-No support are 1s basically and support are 0s.
-
-From documentation: "the first level denotes failure and all others
-success".
+To interpret the coefficients as odds ratios, anything above 1 indicates they are more likely to oppose the changes to civil documents for trans people. This is because no support are coded as 1s and support are coded as 0s.
 
 ```{r}
 levels(datalr$trans_docs)
+table(datalr$trans_docs)
 # Yes = failure = 0
 # No = success = 1
 ```
+
+The logistic regression shows that 26 statistically significant terms. This includes factors variables with multiple terms. Of our 29 scaled variables, the significant variables (at the 5% level) are:
+
+More likely to OPPPOSE the right to change civil documents for trans people, include:  
+- men (compared to wom)
+- younger people 
+- people who oppose legal rights to change gender docs (compared to those who do)
+- people who refused to answer whether they have trans friends (compared to those who do)
+- people who are more financially sound (have fewer bill issues)
+- people not satisfied with their life (compared to those who are 'very satisfied')
+- people who identified as roma or an ethnic minority
+- people who had a higher discrimination score
+
+More likely to SUPPORT the the right
+- older people 
+- women
+- people who were self-employed (compared to all other occupation types incl students)
+- unmarried (single) people
+- non-believers (religious)
+- people with a landline and mobile
+- people who use the internet everyday/almost everyday (compared to all other internet use categories)
+- people who reported being more left wing (compared to right wing)
+- people who had friends in minority groups.
+
+##### Interpreting log-odds of scaled data
+
+_NUMERIC VARIABLES_
+*Without scaling*, we interpret logistic regression output as: 
+
+`coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
+
+`exp(coef(simple_logistic))`: the exponential of the slope coefficient (exp(B)) tells us the change of the odds if the independent variable increases by one unit
+
+*If the data is scaled:*
+
+A coefficient B (from a logistic regression) now reflects the change in the log-odds for a one standard deviation increase in the predictor variable, rather than a one-unit increase in the original scale.
+
+The odds ratio (exp(B)) now tells you how the odds change with a one standard deviation increase in the predictor variable, rather than a one-unit increase.
+
+Here we compare the pre and post transformation of coefficients for interpretation: 
 
 ```{r}
 # all the coefficients
@@ -1976,15 +2024,54 @@ head(coef(simple_logistic))
 head(exp(coef(simple_logistic)))
 ```
 
-`coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
+_FACTOR VARIABLES_
 
-`exp(coef(simple_logistic))`: the exponential of the slope coefficient (exp(B)) tells us the change of the odds if the independent variable increases by one unit
+Factor variables when exponentialised give the likelihood to respond no/yes relative to the base group in the factor variable. We use the function `factors` to view the levels and identify the base group. For example, if the  to log-odds of A large town, (exp(CommunityLarge town)) = 1.04 and iis 
 
-If the data is scaled:
 
-A coefficient B (from a logistic regression) now reflects the change in the log-odds for a one standard deviation increase in the predictor variable, rather than a one-unit increase in the original scale.
+To assist with interpretation of factor outputs: 
 
-The odds ratio (exp(B)) now tells you how the odds change with a one standard deviation increase in the predictor variable, rather than a one-unit increase.
+Here is a function to identify all the base levels in each factor group. Useful to refer to during analysis of different logistic models. 
+
+```{r}
+
+extract_base_groups <- function(df) {
+
+  # extract factor vars only and list to print values
+  factor_vars <- names(final_data)[sapply(final_data, is.factor)]
+  base_groups <- list()
+  
+  # loop through values to check all levels
+  for (var in factor_vars) {
+    if (length(levels(df[[var]])) > 0) { # Check step - should be TRUE for all selected. 
+      contrast_matrix <- contrasts(df[[var]])
+      if (is.null(contrast_matrix)) {
+        base_groups[[var]] <- levels(df[[var]])[1] # check only - shouldn't ever run
+      } else {
+        base_group_level <- levels(df[[var]])[rowSums(abs(contrast_matrix)) == 0] # base group is the one with all zeroes, so we extract that
+        base_groups[[var]] <- base_group_level
+      }
+    } else {
+      base_groups[[var]] <- NA # Indicate non-factor or factor with no levels.
+    }
+  }
+  return(base_groups)
+}
+
+# run function with 'final data' and print a tidy output
+factor_bases <- extract_base_groups(final_data)
+
+factor_bases <- as_tibble(factor_bases) |> 
+  pivot_longer(cols = everything(), 
+               names_to = "vars",
+               values_to = "base_group")
+
+factor_bases
+```
+
+##### Model performance - Simple logistic
+
+Here, we test the models ability to classify people as supporting or not supporting the rights. 
 
 ```{r}
 # AIC of model
@@ -1993,38 +2080,58 @@ simple_logistic$aic
 #predicted probabilities of being a 1 (i.e. a refusal of possibility of trans doc)
 predicted_probs <- simple_logistic$fitted.values
 # same by running
-predicted_probs <- predict(simple_logistic, type = "response")
+# predicted_probs <- predict(simple_logistic, type = "response")
 head(predicted_probs)
 
-# Turning them to classes using custum threshold
+# Turning them to classes using custom threshold
 predicted_classes <- ifelse(predicted_probs > 0.5, "No", "Yes")
 head(predicted_classes)
 ```
 
+Get the confusion matrix:
+
 ```{r}
 confusionMatrix(as.factor(datalr$trans_docs), as.factor(predicted_classes))
+
 ```
+
+The simple model predicted people's response with 82% accuracy. That is quite decent for a basic first model. This shows the response is quite explainable with the data we have. The model is slightly better at predicting those who do not support than those who do. Seen by higher specificity than sensitivity (85% vs 77%). But they are both comparable which is good and confirms we don't have great class imbalance. 
+
 
 ```{r}
 roc_obj <- roc(datalr$trans_docs, predicted_probs)
 
-# Terrible graphs, do we have better ones?
+# Terrible graphs, do we have better ones? Not sure. I think the first is good enough. 
 pROC::ggroc(roc_obj)
 plot(roc_obj)
 
 coords(roc_obj, "best")
-
 auc(datalr$trans_docs, predicted_probs)
+
 ```
 
 ## Stepwise regression
 
-Chooses the best model based on the lowest AIC achievable
+Chooses the best simple logistic model based on the lowest AIC achievable
 
 ```{r}
 set.seed(123)
 stepAIC <- step(simple_logistic, direction = "both", trace=0)
 stepAIC
+```
+
+The stepwise regression gives us the following as the best model: 
+
+    trans_docs = age + gender + marital_status + occupation + 
+        religion + phone_access + bill_issues + internet_use + life_sat + 
+        left_right + ethnic_minority + roma_minority + suffered_discr + 
+        gender_docs + friends_trans + n_friends_minorities + n_actions_against_discri + 
+        antilgbtq_rights + minority_discri + e
+
+It has 19 of the 29 variables included. It is quite consistent with what our significant variables were above, so we will not provide further commentary.  Compared to the full model, this reduced model does not provide a statistically significant improvement in fit. But it does give us a more simple model and shows us what individual level variable may be most important overall. 
+
+```{r}
+anova(simple_logistic, stepAIC)
 ```
 
 ## Lasso regularization
@@ -2039,7 +2146,7 @@ lasso_model <- cv.glmnet(x_lasso, y_lasso, family = "binomial", alpha = 1)
 
 # Get all the coefficients
 coefficients <- coef(lasso_model, s = "lambda.min")
-
+coefficients
 # Filter for the non-zero ones
 non_zero_features <- rownames(coefficients)[which(coefficients != 0)]
 non_zero_features
