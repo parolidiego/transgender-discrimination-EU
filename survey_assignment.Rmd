@@ -208,11 +208,10 @@ cor(gender_index$gender_inequality_index,
 ```
 
 Surprisingly, the two indexes have a very weak positive correlation.
-While they are not inverse, I was expecting them to measure opposite
-things, so maybe the correlation coefficient is not useful here because
-of the low variation of both variables (specially GDI). I don't know
-what else to do with this info other than keeping GII and discarding
-GDI.
+While they are not inverse, we interpreted them as measuring opposite
+things, and had expected a negative correlation. Maybe the correlation
+coefficient is not useful here because of the low variation of both variables
+(specially GDI), so ultimately we chose to keep GII and discard GDI.
 
 ```{r}
 gender_index <- gender_index |> 
@@ -819,7 +818,9 @@ nonetheless we keep this level because it makes sense
 data |> count(social_class)
 ```
 
-Given the low number of observations in some categories of the variable `religion` and the high number of categories we opt to aggregate some of them, otherwise we risk too much noise in our models.
+Given the low number of observations in some categories of the variable 
+`religion` and the high number of categories we opt to aggregate some of
+them, otherwise we risk too much noise in our models.
 
 ```{r}
 data |> count(religion)
@@ -1298,6 +1299,16 @@ Some heavy correlations which is a little worrying, but as we are going to use
 these data to build cross-level interactions, this should not compromise the 
 reliability of our analysis too much.
 
+Lastly, we can drop the trans_support variable from the table country_level_data,
+so it is not duplicated when we join aggregated individual survey data to it.
+
+```{r}
+country_level_data <- country_level_data |> 
+  select(-trans_support)
+  
+```
+
+
 ## Paradata
 
 ```{r}
@@ -1427,9 +1438,9 @@ corrplot(cor_filtered, method = "color", type = "upper",
          insig = "blank") 
 ```
 
-Most strong correlations are among variables related race, religion or sexual
+Most strong correlations are among variables related to race, religion or sexual
 orientation discrimination. Consequently, we are grouping them into 3 new
-çcomposite variables by averaging related ones, in order to reduce multicollinearity.
+composite variables by averaging related ones, in order to reduce multicollinearity.
 
 
 ```{r}
@@ -1513,7 +1524,7 @@ Less represented classes in other variables have already been aggregated if deem
 Here we analyse the NA reponses to our target variable. This is a sort
 of robustness check to understand our data and learn if there are
 patterns in NA response that we should be worried about e.g. if there
-are specific demographics of people are less likely to respond.
+are specific demographics of people who are less likely to respond.
 
 Overall the analysis below shows that non response is similar to the
 descriptive data and aligned with some groups reported "No" to
@@ -2229,15 +2240,121 @@ But for now I guess we can join:
 ```{r}
 data_aggr <- data_aggr |> 
   left_join(data_factors, by = "country")
+```
+
+Lastly, we join the country-level variables obtained from external sources.
+
+```{r}
+data_aggr <- data_aggr %>%
+  left_join(country_level_data, by = c("country" = "iso2c")) %>%
+  select(-iso3c, -country.y) # drop unnecessary country identifiers
 
 dim(data_aggr)
 ```
 
-The resulting data frame has 28 observations and 76 variables. We might have to
+The resulting data frame has 28 observations and 80 variables. We might have to
 clean the names of the variables that were glued from variable_level.
 
 
 ## Linear regression with LASSO
+
+```{r}
+# Impute missing values using median imputation
+pre_proc <- preProcess(data_aggr, method = "medianImpute")
+
+# Apply the preprocessing
+data_imputed <- predict(pre_proc, data_aggr)
+
+# 2. Scale the data (excluding the target and country variable)
+# Select predictors, remove country and target variable
+dataggr_scaled <- data_imputed %>%
+  select(-country, -mean_trans_docs) %>%
+  scale()
+
+# Convert to matrix for glmnet
+features_scaled <- as.matrix(dataggr_scaled)
+
+# Extract the target variable
+target <- data_aggr$mean_trans_docs
+
+# Define the leave-one-out cross-validation control
+ctrl <- trainControl(
+  method = "LOOCV",
+  verboseIter = TRUE
+)
+
+# Set up the grid of lambda values for Lasso
+lambda_grid <- 10^seq(-3, 3, length = 100)
+
+# Train the Lasso model with LOOCV
+lasso_model <- train(
+  x = features_scaled,
+  y = target,
+  method = "glmnet",
+  trControl = ctrl,
+  tuneGrid = expand.grid(
+    alpha = 1,  # 1 for Lasso
+    lambda = lambda_grid
+  ),
+  metric = "RMSE"
+)
+
+# Print the best tuning parameter (lambda)
+print(lasso_model$bestTune)
+
+# Summarize the final model
+print(lasso_model)
+
+# Examine variable importance
+importance <- varImp(lasso_model, scale = FALSE)
+print(importance)
+plot(importance, top = 20)
+
+# Get the coefficients of the best model
+best_lambda <- lasso_model$bestTune$lambda
+final_model <- glmnet(features_scaled, target, alpha = 1, lambda = best_lambda)
+coef_lasso <- coef(final_model)
+print(coef_lasso)
+
+# Calculate predictions and residuals
+predictions <- predict(lasso_model, features_scaled)
+residuals <- target - predictions
+
+# Calculate R-squared and RMSE
+r_squared <- 1 - sum(residuals^2) / sum((target - mean(target))^2)
+rmse <- sqrt(mean(residuals^2))
+
+cat("R-squared:", r_squared, "\n")
+cat("RMSE:", rmse, "\n")
+
+# Plot actual vs predicted values
+plot(target, predictions, 
+     main = "Actual vs Predicted Values",
+     xlab = "Actual", ylab = "Predicted",
+     pch = 16, col = "blue")
+abline(0, 1, col = "red")
+
+# Plot residuals
+plot(predictions, residuals,
+     main = "Residuals vs Predicted Values",
+     xlab = "Predicted Values", ylab = "Residuals",
+     pch = 16, col = "blue")
+abline(h = 0, col = "red")
+
+# Optional: if you want to see country-level predictions
+# Combine country names with predictions
+country_predictions <- data.frame(
+  country = data_imputed$country,
+  actual = target,
+  predicted = predictions
+)
+
+# Sort by prediction (descending)
+country_predictions <- country_predictions[order(country_predictions$predicted, decreasing = TRUE), ]
+print(country_predictions)
+
+```
+
 
 ## Random forest
 
@@ -2261,8 +2378,8 @@ Testing a nested dataset by country
 
 ```{r}
 # Commented the below as we are probably not gonna use it
-
-# nested.cntry <- complete_df %>% 
+# 
+# nested.cntry <- complete_df %>%
 #   group_by(country) %>%
 #   nest()
 # 
@@ -2295,8 +2412,8 @@ Testing a nested dataset by country
 
 #### Mixed models
 
-Fixed effects: Things that are the same across the cluster Random
-effects: Things that change within the cluster
+Fixed effects: Things that are the same across the cluster
+Random effects: Things that change within the cluster
 
 The fixed and random effects could refer to either the intercept or the
 slope, as these can both vary between groups.
@@ -2446,3 +2563,5 @@ parameters (random and fixed).
 *Useful calculations:* - ICC (intra cluster correlation. How alike each
 of the observations within each group are) - ANOVA for model comparison:
 anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
+
+
