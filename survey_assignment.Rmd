@@ -940,16 +940,16 @@ country_level_data <- codelist |>
 str(country_level_data)
 ```
 
-I thought by aggregating we meant synthesizing the information from the individual respondents into country-level variables? but I don't know if this is something that models do directly.
+In the next steps we will synthesize the information from the individual respondents into country-level variables.
 
 My approach was using means for numeric variables:
 ```{r}
 names(select(data, where(is.numeric)))
 
-data_num <- data %>%
+data_num <- data |> 
   select(-serialid) |> 
-  group_by(country) %>%
-  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
+  group_by(country) |> 
+  summarise(across(where(is.numeric), ~mean(.), .names = "mean_{.col}"))
 ```
 
 As well as for dummies:
@@ -961,24 +961,42 @@ dummy_names
 dummy_levels <- lapply(data[dummy_names], levels)
 dummy_levels
 
+colSums(is.na(data[dummy_names]))
+```
+
+After imputations only the target variable should have NAs. 
+
+```{r}
 data_dummy <- data %>%
   select(country, all_of(dummy_names)) %>%
   mutate(across(all_of(dummy_names),
                 ~ case_when(
-                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
-                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
-                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
-                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
+                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # convert "0"/"1" to 0/1
+                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # convert "Yes"/"No" to 1/0
+                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # convert "Man"/"Woman" to 1/0
+                  TRUE ~ NA_real_  # assign NA to other unexpected values
                 ),
                 .names = "{.col}_num"))
 ```
 
 I converted factors with 2 levels to numerical 0-1 so we can compute their means.
+I am creating a column with the proportion of missing answers per country, but if 
+we don't need it at this stage we can just remove that line. NOTE THAT the mean of
+trans_docs is not considering NAs, just Yes and No answers.
 
 ```{r}
+# country means
 data_dummy <- data_dummy %>%
   group_by(country) %>%
-  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+  mutate(trans_docs_na = sum(is.na(trans_docs_num)) / n()) %>% # calculating proportion of NAs
+  summarise(
+    across(ends_with("_num"), ~ mean(.x, na.rm = TRUE)),
+    trans_docs_na = first(trans_docs_na),
+    .groups = "drop"
+  )
+
+summary(data_dummy$trans_docs_na)
+
 
 # substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
 data_dummy <- data_dummy %>%
@@ -986,16 +1004,58 @@ data_dummy <- data_dummy %>%
 ```
 
 Now we can join the two datasets:
+
 ```{r}
 data_aggr <- data_num %>%
   left_join(data_dummy, by = "country")
 ```
 
-The next variables are not numeric nor factor with 2 levels, so they are not included in data_aggr:
+The next variables are factor with >2 levels:
+
 ```{r}
-names(data)[!sapply(data, is.numeric) &
+factor_names <- names(data)[!sapply(data, is.numeric) &
               !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+factor_names
+
+# checking the levels
+lapply(data[factor_names], levels)
+
+# removing country from the list
+factor_names <- setdiff(factor_names, "country")
+
+# creating the aggregated dataset for factor variables
+data_factors <- data %>%
+  select(country, all_of(factor_names)) %>%
+  drop_na() %>% # DROPPING NAs TO "SIMULATE" IMPUTATION
+  pivot_longer(cols = -country, names_to = "variable", values_to = "level") %>%
+  drop_na(level) %>% # Drop rows where the 'level' column is NA
+  group_by(country, variable, level) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(country, variable) %>%
+  mutate(proportion = count / sum(count)) %>%
+  select(-count) %>%
+  pivot_wider(names_from = c(variable, level), values_from = proportion, names_glue = "{variable}_{level}")
+
+colSums(is.na(data_factors))
+
 ```
+
+I did several tests and still can't figure out why we are seeing NAs in some columns
+if I explicitly dropped them (twice). I'll come back to this after imputations to 
+see how it changed.
+
+But for now I guess we can join:
+```{r}
+data_aggr <- data_aggr |> 
+  left_join(data_factors, by = "country")
+
+dim(data_aggr)
+```
+The resulting data frame has 88 variables, I don't know if we should recode/collapse
+some factor levels if they have few answers, to reduce the number of variables.
+I'll pull imputations and get back to this (Irene).
+
+
 ///////
 
 Not using paradata for now. We can discuss how to use it
@@ -1513,7 +1573,7 @@ I am using only individual level data for now
 Example below can also be done with less variables to ensure readibility 
 
 ```{r}
-data <- data |> 
+data <- data |>
   # Dropping all NAs for now (glm does this automatically already)
   drop_na() |> 
   # Selecting only predictor variables
@@ -1804,4 +1864,3 @@ The function broom.mixed::tidy() gives us all model parameters (random and fixed
 _Useful calculations:_
   - ICC (intra cluster correlation. How alike each of the observations within each group are)
   - ANOVA for model comparison: anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
-
