@@ -1942,7 +1942,8 @@ datalr <- final_data |>
   # Scale variables 
   mutate(across(where(is.numeric), scale))
   
-simple_logistic <- glm(trans_docs ~ ., data = datalr, family = binomial(link = "logit"))
+# now run the full model, include age^2 as is good practice
+simple_logistic <- glm(trans_docs ~ . + I(age*age), data = datalr, family = binomial(link = "logit"))
 
 # Save the summary
 logistic_summary <- summary(simple_logistic)
@@ -2120,15 +2121,7 @@ stepAIC <- step(simple_logistic, direction = "both", trace=0)
 stepAIC
 ```
 
-The stepwise regression gives us the following as the best model: 
-
-    trans_docs = age + gender + marital_status + occupation + 
-        religion + phone_access + bill_issues + internet_use + life_sat + 
-        left_right + ethnic_minority + roma_minority + suffered_discr + 
-        gender_docs + friends_trans + n_friends_minorities + n_actions_against_discri + 
-        antilgbtq_rights + minority_discri + e
-
-It has 19 of the 29 variables included. It is quite consistent with what our significant variables were above, so we will not provide further commentary.  Compared to the full model, this reduced model does not provide a statistically significant improvement in fit. But it does give us a more simple model and shows us what individual level variable may be most important overall. 
+The stepwise regression has 19 of the 29 variables included in it's best model. It is quite consistent with what our significant variables were above, so we will not provide further commentary.  Compared to the full model, this reduced model does not provide a statistically significant improvement in fit. But it does give us a more simple model and shows us what individual level variable may be most important overall. 
 
 ```{r}
 anova(simple_logistic, stepAIC)
@@ -2136,9 +2129,17 @@ anova(simple_logistic, stepAIC)
 
 ## Lasso regularization
 
+We still have too many variables for a mixed model. So here we will use Lasso to keep only our most important variables for the mixed models. 
+
+Without this step, the glmer stage is too computationally expensive. 
+
 ```{r}
+# extract the significant variables from the stepAIC model
+
+vars <- all.vars(formula(stepAIC))
 # Convert data into a matrix for glmnet
-x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
+#x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
+x_lasso <- as.matrix(datalr[, vars[vars != "trans_docs"]]) 
 y_lasso <- as.matrix(datalr$trans_docs)
 
 # Fit the Lasso model (alpha = 1 for Lasso regularization)
@@ -2152,7 +2153,29 @@ non_zero_features <- rownames(coefficients)[which(coefficients != 0)]
 non_zero_features
 ```
 
-It might not be the best with factors, but it could be useful with numeric
+Here we have the reduced model with lasso. It gives us 8 variables now. We will inc
+
+Brad --> This is a really useful step because the glmer runs so long. But I'm struggling to interpert because the significant variables aren't that intuitive and don't agree as much with the logistic. E.g. variables like gender, 
+
+
+#### Final variable selection
+
+From these hints above and general intuition, we will select the following variables as our individual level fixed effects in the mixed level model: 
+
+- age
+- gender
+- religion (to be recoded as non-believer dummy since that's the significant variable)
+- bill_issues
+- internet use (recoded to everyday or not)
+- left_right
+- ethnic minority + roma minority (recoded to one dummy)
+- trans_friends
+- lgbti_docs
+- minority_discri 
+
+And these are our pre-defined fixed 
+
+
 
 ## Mixed model
 
@@ -2184,15 +2207,91 @@ Cross-level interactions are particularly useful in multilevel research because 
 
 For example, in educational research: 1) Individual level: student characteristics (study time, prior knowledge). 2) Group level: school or classroom characteristics (class size, teaching method). 3) Cross-level interaction: Does the effect of study time on performance depend on class size?
 
+### Running the glmer models
+
+To model, we will follow: Approach to multilevel model building based on Hox (2010)
+
+1/ Null Model (Random Intercept only) 2/ Add independent Level 1
+variables 3/ Add independent Level 2 variables 4/ Add random slopes 5/
+(Cross-level) interactions
+
+Each step, check whether your model is significantly improved compared
+to the previous one.
+
+We could run these different models and select the best one: 
+null_glmer -> only country random effects for a baseline
+glmer_stepwise -> using the best stepwise model best model for individual fixed effects + adding country random effects
+glmer_lasso -> using the lasso model fixed individual level effects + country
+glmer_level2 -> using the best model from above and adding in all country level fixed effects too
+glmer_cross_level -> the model using integrated 
+
 ```{r}
 # Switching to df containing both individual and country level
 complete_df <- complete_df |> 
-  drop_na() # should only be in our target
+  drop_na() # should be zero as we cleaned before but just in case 
 
 # Scaling the variables speeds up the running time. However we loose interpretation? maybe the best thing to do is to center them rather than scaling?
 scaled_df <- complete_df |>
   mutate(across(where(is.numeric), scale))
 
+# include glmer null model for comparison for improvements - only has random intercept
+null_glmer_model <- glmer(trans_docs ~ (1|country),
+                          data = complete_df, 
+                          family=binomial(link="logit"))
+
+
+## running the level 1 glmer model (indiviudal fixed effects + country random effects)
+    # variable selection from the stepwise model output
+# this took 7.6 minutes to run WITH the scaled data, saved output locally
+      # start <- Sys.time()
+      # glmer_model_level1 <- glmer(
+      #   # target
+      #   trans_docs ~
+      #     #individual data - significant from stepwise testing
+      #     age + gender + marital_status + occupation + 
+      #     religion + phone_access + bill_issues + internet_use + life_sat + 
+      #     left_right + ethnic_minority + roma_minority + suffered_discr + 
+      #     gender_docs + friends_trans + n_friends_minorities + n_actions_against_discri + 
+      #     antilgbtq_rights + minority_discri + (1|country),
+      #   data = scaled_df,
+      #   family = binomial(link="logit")
+      #     ) 
+      # end <- Sys.time()
+      # end-start
+
+      # glmer_model_level1
+      # output_glmer_1 <- broom.mixed::tidy(glmer_model_level1)
+
+## running the level 2 glmer model (individual & country fixed effects + country random effects)
+
+# took 10.8 minutes to run so commented out. Saved output locally 
+      # start <- Sys.time()
+      # glmer_model_level2 <- glmer(
+      #   # target variable
+      #   trans_docs ~
+      #     #individual level fixed effects
+      #     age + gender + marital_status + occupation +
+      #     religion + phone_access + bill_issues + internet_use + life_sat +
+      #     left_right + ethnic_minority + roma_minority + suffered_discr +
+      #     gender_docs + friends_trans + n_friends_minorities + n_actions_against_discri +
+      #     antilgbtq_rights + minority_discri + 
+      #     #country level fixed effects
+      #     gdp_pc_ppp + gender_inequality_index + lgbt_policy_index + democracy_index +
+      #     # random effects of country
+      #     (1|country),
+      #   data = scaled_df,
+      #   family = binomial(link="logit")
+      #           )
+      # end <- Sys.time()
+      # end-start
+      # output_glmer_2 <- broom.mixed::tidy(glmer_model_level2)
+
+## saving the level1 and level2 outputs to file for review of full model effects
+write_csv2(output_glmer_1, "glmer_level1_model_output.csv")
+write_csv2(output_glmer_2, "glmer_level2_model_output.csv") 
+
+
+# glmer model with cross-level interactions
 glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequality_index + religion*gdp_pc_ppp + (1 | country), data=scaled_df, family=binomial(link="logit"))
 
 #variable1*variable2 includes both the two variables separetely and their interaction
@@ -2201,11 +2300,22 @@ glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequ
 
 summary(glmer_model) # print in better tables as Marga likes
 
-# Need to calculate intra class coefficient (proportion of variation explained by the grouping level)
+# To calculate the intraclass coefficient (ICC) for the model, we use the ICC function from performance. 
 
+# Calculate ICC for the null model, we get around 22% explained 
+performance::icc(null_glmer_model)
+
+# When we run for the model with scaled data, we get 7% ICC 
+performance::icc(glmer_model)
+
+
+# this gives us the following significant variables: age, gender, occupation, religion, phone_access, bill_issues, internet_use, left_right, ethnic_minority_ 
+
+# we exclude these non significant variable: martial_status,  
 ```
 
 The idea is to run interactions between individual level variables and country level variables choosing pair which make sense (ex. does the effect of being female on support for trans docs depend on the gender equality index? --> did this by doing gender*gender_inequality_index)
+
 
 Let's use our brain and common sense to choose the best combinations
 
