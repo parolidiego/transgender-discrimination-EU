@@ -2236,7 +2236,7 @@ scaled_df <- complete_df |>
 
 # include glmer null model for comparison for improvements - only has random intercept
 null_glmer_model <- glmer(trans_docs ~ (1|country),
-                          data = complete_df, 
+                          data = scaled_df, 
                           family=binomial(link="logit"))
 
 
@@ -2286,13 +2286,19 @@ null_glmer_model <- glmer(trans_docs ~ (1|country),
       # end-start
       # output_glmer_2 <- broom.mixed::tidy(glmer_model_level2)
 
-## saving the level1 and level2 outputs to file for review of full model effects
-write_csv2(output_glmer_1, "glmer_level1_model_output.csv")
-write_csv2(output_glmer_2, "glmer_level2_model_output.csv") 
-
 
 # glmer model with cross-level interactions
 glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequality_index + religion*gdp_pc_ppp + (1 | country), data=scaled_df, family=binomial(link="logit"))
+
+
+
+## saving the level1 and level2 outputs to file for review of full model effects
+    #write_csv2(output_glmer_1, "glmer_level1_model_output.csv")
+    #write_csv2(output_glmer_2, "glmer_level2_model_output.csv") 
+## writing output for AIC/BIC and saving too    
+    # glmer_compare <- anova(null_glmer_model, glmer_model_level1, glmer_model_level2, glmer_model)
+    # write_csv2(glmer_compare, "glmer_compare_basicmodels.csv") 
+
 
 #variable1*variable2 includes both the two variables separetely and their interaction
 #variable1:variable2 includes only the interaction
