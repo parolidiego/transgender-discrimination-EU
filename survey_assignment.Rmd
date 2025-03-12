@@ -1518,7 +1518,7 @@ cor_matrix <- cor(data %>%
                   use = "complete.obs")
 
 corrplot(cor_matrix, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
+         tl.col = "black",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 
 
@@ -1527,7 +1527,7 @@ cor_filtered <- ifelse(abs(cor_matrix) >= 0.7, cor_matrix, NA)
 
 # Graph
 corrplot(cor_filtered, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
+         tl.col = "black", 
          col = colorRampPalette(c("blue", "white", "red"))(200),
          na.label = " ",
          insig = "blank") 
@@ -1557,25 +1557,22 @@ cor_matrix <- cor(data %>%
 
 
 corrplot(cor_matrix, method = "color", type = "upper", 
-         addCoef.col = "black", tl.col = "black",
+         tl.col = "black",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
 
 We realize our new variables are still highly correlated between them. For reducing the dimensionality of the dataset even more while preserving information we create one single variable for general minority discrimination.
 
 ```{r}
-
 # Creating grouped variable
 data <- data %>%
   mutate(
     minority_discri = rowMeans(select(., racial_discri, sexual_discri, religious_discri, disability_discri), na.rm = TRUE)) 
-
 ```
 
 We decided to exclude white_discri, atheist_discri, christian_discri because we realized they had a median of 1 and a quite small mean, meaning there is almost no reported discrimination against these groups in the dataset.
 
 ```{r}
-
 summary(data$white_discri)
 summary(data$atheist_discri)
 summary(data$christian_discri)
@@ -1584,7 +1581,9 @@ data <- data |>
   select(-c(white_discri, atheist_discri, christian_discri, racial_discri, sexual_discri, religious_discri, disability_discri))
 
 ```
+
 Final check of the correlation matrix to confirm that multicollinearity has been reduced.
+
 ```{r}
 cor_matrix <- cor(data %>%
                     select_if(is.numeric) %>%
@@ -1977,67 +1976,27 @@ odds ratios here are very high.
 
 # Imputing missing data
 
-lo hago con left right porque es la que mas nos interesa imputar, para decidir qué metodo usar. Uso mice (pmm random forest, porque es factor )
+As we have different types of variables we decide to go with the default methods. Selecting the best method for each type of variable would be too computationally intensive
 
 ```{r}
+# Excluding target variable and other useless variables
+imputation_data <- data |> 
+  select(-c(serialid, country, trans_docs))
 
-mice_imputed <- data.frame(
-  original = data$left_right,
-  imputed_pmm = complete(mice(data, m=1, method = "pmm", seed=123))$left_right, # We write an m=1 so that it doesn't take that long
-  imputed_rf = complete(mice(data, m=1, method = "rf", seed=123))$left_right)
+# Running it with the default methods
+# We can change m in case we decide to use pool later instead of just completing 1 df)
+imputed_data <- mice(imputation_data, m = 1, seed=1234)
+# By default: numerical variables -> pmm, binary factors -> logreg, > 2 levels factors -> polyreg
+imputed_data$method
 
-
-# Define variables, titles, and colors for the updated set of distributions
-variables <- c("original", "imputed_pmm", "imputed_rf")
-titles <- c("Distribution of the left_right variable", "PMM-imputed distribution", "RF-imputed distribution")
-colors_fill <- c("skyblue", "#15ad4f", "#6a6ad9")
-colors_border <- c("skyblue3", "#808080", "#808080")
-
-# Transform data to long format for ggplot
-mice_imputed_long <- mice_imputed %>%
-  pivot_longer(all_of(variables), names_to = "method", values_to = "value")
-
-# Facet wrap
-mice_imputed_long %>%
-  mutate(title = factor(method, levels = variables, labels = titles)) %>%
-  ggplot(aes(x = value, fill = title)) +
-  geom_bar(color = "#808080", position = "identity", alpha = 0.7, stat = "count") +  # Cambio importante aquí
-  facet_wrap(~title, scales = "free_y") +
-  scale_fill_manual(values = colors_fill) +
-  theme_classic() +
-  theme(legend.position = "none") +
-  labs(title = "Comparison of Left-Right Imputation Methods",
-       x = "Left-Right Categories",
-       y = "Count")
-
-```
-
-They seem to perform almost the same. We will go with pmm.
-
-```{r}
-# Get the number of columns in the dataset
-num_cols <- ncol(data)
-
-# Define the imputation method for each column
-method_vector <- rep("pmm", num_cols)  # Use "pmm" for all columns
-
-# Identify the position of the target variable
-target_variable <- "trans_docs"
-target_position <- which(names(data) == target_variable)
-
-# Do not impute the target variable
-method_vector[target_position] <- ""  # Leave this position blank
-
-# Perform imputation without modifying the target variable
-imputed_data <- mice(data, method = method_vector, m = 1, seed = 123)
-
-# Get the fully imputed dataset
 final_data <- complete(imputed_data)
 
-
-colSums(is.na(data))
+colSums(is.na(imputation_data))
 colSums(is.na(final_data))
 
+final_data <- final_data |> 
+  cbind(data$trans_docs) |> 
+  rename("trans_docs" = "data$trans_docs")
 ```
 --> WE STILL HAVE NAs i don't understand why:(
 
@@ -2134,6 +2093,8 @@ Also we can check coherence of Stepwise results with simple logistic regression'
 
 ## Mixed model
 
+<https://favstats.github.io/intro_multilevel/slides/#1>
+
 Random Intercept Model:
 
 Allows the baseline level (intercept) to vary across groups. Assumes the relationship between predictors and outcome (slope) is the same for all groups
@@ -2174,6 +2135,12 @@ glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequ
 #+ (1|country) country is the grouping variable, means it includes different intercepts for each country
 
 summary(glmer_model)
+
+# Need to calculate intra class coefficient (proportion of variation explained by the grouping level)
+
+
+library(texreg)
+htmlreg(glmer_model)
 ```
 
 The idea is to run interactions between individual level variables and country level variables choosing pair which make sense (ex. does the effect of being female on support for trans docs depend on the gender equality index? --> did this by doing gender*gender_inequality_index)
