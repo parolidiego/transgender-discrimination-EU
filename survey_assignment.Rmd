@@ -117,105 +117,13 @@ rural_data <- rural_data |>
 str(rural_data)
 ```
 
-### Same sex unions
+### LGBT rights
 
-Retrieved from Wikipedia
-(<https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe>).
-
-Table about status of same sex unions by country in Europe.
-
-```{r}
-# scraping the table
-marriage_data <- read_html("https://en.wikipedia.org/wiki/Recognition_of_same-sex_unions_in_Europe") |>
-  html_table() %>%
-  .[[4]] |>
-  select(Status, Country)
-
-# cleaning the status column
-marriage_data <- marriage_data |> 
-  mutate(Status = str_remove(Status, "\\s*\\(.*|\\s*-.*")) |> 
-  filter(!Status %in% c("Total", "Subtotal"))
-
-# cleaning the country column
-marriage_data <- marriage_data |> 
-  mutate(Country = str_replace_all(Country, c("\\*" = "", "†" = "", "\\[.*?\\]" = ""))) |> 
-  mutate(Country = trimws(Country))
-
-# keeping only eu-28 countries 
-marriage_data <- marriage_data |> 
-  inner_join(select(codelist, cow.name), by = c("Country" = "cow.name"))
-
-str(marriage_data)
-```
-
-This variable could be recoded as either ordinal, categorical (both
-factor) or logical.
-
-The dataset has 32 observations instead of 28 (EU-28 countries).
-
-```{r}
-marriage_data |> 
-  add_count(Country) |> 
-  filter(n > 1)
-```
-
-According to this test, Croatia, Hungary, Latvia and Slovakia have two
-different types of status, so maybe we should cross-check with other
-sources?
-
-Diego: the thing is that countries can at the same time have a
-constitutional ban on marriage and still have legally recognized civil
-unions. Thus maybe we should exclude this level from this variable as it
-is not exclusive. The lowest level would remain no recognition.
-
-Irene: I guess we need to decide whether we think it is more
-important/representative of a country to have civil unions for same-sex
-couples or a constitutional ban on same-sex marriage (this feels pretty
-strong tbh). It depends also on how we want to recode this.
-
-<br>
-
-The table is up to date, so I had to check (on Wikipedia honestly) what
-year each of those items was actually legalized and I got to this:
-
------------------------------same sex
-marriage-----------------------------
-
-Greece: civil unions since 2015, marriage since 2024
-
-Estonia: civil unions since 2016, marriage since 2024
-
-Slovenia: civil unions since 2017, marriage since 2022
-
-United Kingdom: marriage since 2014 in England, Scotland and Wales, and
-since 2020 in Northern Ireland. Civil unions since 2005
-
----------------------------------civil
-unions-----------------------------------
-
-Latvia: civil unions since 2024, the Constitution prohibits the
-recognition of same sex marriage since 2006.
-
-```{r}
-marriage_data <- marriage_data |> 
-  mutate(Status = case_when(
-    Country == "Greece" ~ "Civil Unions",
-    Country == "Estonia" ~ "Civil Unions",
-    Country == "Slovenia" ~ "Civil Unions",
-    Country == "United Kingdom" ~ "Civil Unions" ,  # I understand that same-sex marriage wasn't legal in the UK until it was legalised in all of its territories, but this can be discussed
-    Country == "Latvia" & Status == "Civil unions" ~ "No recognition", # only mutate one of the rows that Latvia is in
-    # Latvia had no recognition prior to 2024, but it has a constitutional ban on marriage, which is a category that we found alongside others in some observations, so we'll keep two rows for Latvia for now
-    TRUE ~ Status
-  ))
-
-marriage_data |> filter(Country %in% c("Latvia", "Greece", "Estonia", "Slovenia", "United Kingdom"))
-```
-
-I also found this LGBT rights index on Our World in Data
+Found this LGBT rights index on Our World in Data
 (<https://ourworldindata.org/grapher/lgbt-rights-index>) which captures
 whether LGBT+ people enjoy the same rights as cisgender people combining
 information on 18 different policies. It includes the legal status of
-same-sex marriage so we might keep only one of these.
+same-sex marriage.
 
 ```{r}
 lgbt_rights_index <- read.csv("lgbt-rights-index.csv")
@@ -337,7 +245,7 @@ democracy_index <- democracy_index |>
 str(democracy_index)
 ```
 
-In this case, we are only keeping the
+In this case, we are only keeping the overall index value.
 
 ```{r}
 democracy_index <- democracy_index |> 
@@ -657,7 +565,7 @@ list_label_tibbles <- setNames(list_label_tibbles, names(data))
 list_label_tibbles$d70
 ```
 
-Right column is what it appears in our data (as a number). Left column
+Right column is what appears in our data (as a number). Left column
 is the label that we must assign to that number when we factorize
 
 ## Cleaning
@@ -1001,7 +909,9 @@ data <- data |>
   select(-c("disc_where", "disc_contact"))
 ```
 
-# Exploratory Data Analysis
+Not using paradata for now. We can discuss how to use it
+
+# Exploratory Data Analysis 
 
 Plotting the distribution of the numeric variables
 
@@ -1384,7 +1294,9 @@ corrplot(cor_matrix, method = "color", type = "upper",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
 
-Some heavy correlations which is a little worrying, but as we are going to use these data to build cross-level interactions, this should not compromise the reliability of our analysis too much.
+Some heavy correlations which is a little worrying, but as we are going to use 
+these data to build cross-level interactions, this should not compromise the 
+reliability of our analysis too much.
 
 ## Paradata
 
@@ -1487,7 +1399,10 @@ support.
 
 # Correlation and multicollinearity
 
-Now we want to take a look at the possible multicollinearity of our explanatory variables. For it, we calculate the correlation of our numerical variables. As we have too many variables, we visualize just those with a strong correlation to focus on key dependencies.
+Now we want to take a look at the possible multicollinearity of our explanatory
+variables. For it, we calculate the correlation of our numerical variables. As
+we have too many variables, we visualize just those with a strong correlation to 
+focus on key dependencies.
 
 ```{r}
 
@@ -1512,7 +1427,10 @@ corrplot(cor_filtered, method = "color", type = "upper",
          insig = "blank") 
 ```
 
-Most strong correlations are among variables related race, religion or sexual orientation discrimination. Consequently, we are grouping them into 3 new composite variables by averaging related ones, in order to reduce multicollinearity.
+Most strong correlations are among variables related race, religion or sexual
+orientation discrimination. Consequently, we are grouping them into 3 new
+çcomposite variables by averaging related ones, in order to reduce multicollinearity.
+
 
 ```{r}
 # Creating grouped variables
@@ -1540,7 +1458,9 @@ corrplot(cor_matrix, method = "color", type = "upper",
          col = colorRampPalette(c("blue", "white", "red"))(200))
 ```
 
-We realize our new variables are still highly correlated between them. For reducing the dimensionality of the dataset even more while preserving information we create one single variable for general minority discrimination.
+We realize our new variables are still highly correlated between them. For reducing 
+the dimensionality of the dataset even more while preserving information we create
+one single variable for general minority discrimination.
 
 ```{r}
 # Creating grouped variable
@@ -1549,7 +1469,9 @@ data <- data %>%
     minority_discri = rowMeans(select(., racial_discri, sexual_discri, religious_discri, disability_discri), na.rm = TRUE)) 
 ```
 
-We decided to exclude white_discri, atheist_discri, christian_discri because we realized they had a median of 1 and a quite small mean, meaning there is almost no reported discrimination against these groups in the dataset.
+We decided to exclude white_discri, atheist_discri, christian_discri because we 
+realized they had a median of 1 and a quite small mean, meaning there is almost
+no reported discrimination against these groups in the dataset.
 
 ```{r}
 summary(data$white_discri)
@@ -1954,7 +1876,9 @@ odds ratios here are very high.
 
 # Imputing missing data
 
-As we have different types of variables we decide to go with the default methods. Selecting the best method for each type of variable would be too computationally intensive
+As we have different types of variables we decide to go with the default methods.
+Selecting the best method for each type of variable would be too computationally
+intensive
 
 ```{r}
 # Excluding target variable and other useless variables
@@ -2189,27 +2113,26 @@ leave-one-out cross validation
 
 ## Aggregating individual data to country level
 
-We should be builiding a dataframe with 28 rows (1 per country), but
+We should be building a dataframe with 28 rows (1 per country), but
 many variables (ex, percentage of christian people by country,
 percentage of very satisfied with lives people by country, percentage of
 people that belong to the roma minority etc.; our target variable would
 become % of people that support trans_docs by country)
 
-Synthesizing the information from the individual respondents into country-level variables? but I don't know if this is something that models do directly.
+In the next steps we will synthesize the information from the individual 
+respondents into country-level variables.
 
-My approach was using means for numeric variables:
-
+Using means for numeric variables:
 ```{r}
 names(select(data, where(is.numeric)))
 
-data_num <- data %>%
-  group_by(country) %>%
-  summarise(across(where(is.numeric), ~mean(. , na.rm = TRUE), .names = "mean_{.col}"))
-str(data_num)
+data_num <- data |> 
+  select(-serialid) |> 
+  group_by(country) |> 
+  summarise(across(where(is.numeric), ~mean(.), .names = "mean_{.col}"))
 ```
 
 As well as for dummies:
-
 ```{r}
 # searching for factor variables with two levels
 dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
@@ -2218,46 +2141,100 @@ dummy_names
 dummy_levels <- lapply(data[dummy_names], levels)
 dummy_levels
 
+colSums(is.na(data[dummy_names]))
+```
+
+After imputations only the target variable should have NAs. 
+
+```{r}
 data_dummy <- data %>%
   select(country, all_of(dummy_names)) %>%
   mutate(across(all_of(dummy_names),
                 ~ case_when(
-                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # Converts "0"/"1" to 0/1
-                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # Converts "Yes"/"No" to 1/0
-                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # Converts "Man"/"Woman" to 1/0
-                  TRUE ~ NA_real_  # Assigns NA to other unexpected values
+                  . %in% c("0", "1") ~ as.numeric(as.character(.)),  # convert "0"/"1" to 0/1
+                  . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # convert "Yes"/"No" to 1/0
+                  . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # convert "Man"/"Woman" to 1/0
+                  TRUE ~ NA_real_  # assign NA to other unexpected values
                 ),
                 .names = "{.col}_num"))
 ```
 
-I converted factors with 2 levels to numerical 0-1 so we can compute
-their means.
+I converted factors with 2 levels to numerical 0-1 so we can compute their means.
+I am creating a column with the proportion of missing answers per country, but if 
+we don't need it at this stage we can just remove that line. NOTE THAT the mean of
+trans_docs is not considering NAs, just Yes and No answers.
 
 ```{r}
+# country means
 data_dummy <- data_dummy %>%
   group_by(country) %>%
-  summarize(across(ends_with("_num"), \(x) mean(x, na.rm = TRUE)), .groups = "drop")
+  mutate(trans_docs_na = sum(is.na(trans_docs_num)) / n()) %>% # calculating proportion of NAs
+  summarise(
+    across(ends_with("_num"), ~ mean(.x, na.rm = TRUE)),
+    trans_docs_na = first(trans_docs_na),
+    .groups = "drop"
+  )
+
+summary(data_dummy$trans_docs_na)
+
 
 # substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
 data_dummy <- data_dummy %>%
   rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
-str(data_dummy)
 ```
 
-Now we can join the two datasets:
+Now we can join the two datasets.
 
 ```{r}
 data_aggr <- data_num %>%
   left_join(data_dummy, by = "country")
 ```
 
-The next variables are not numeric nor factor with 2 levels, so they are
-not included in data_aggr:
+The next variables are factor with >2 levels:
 
 ```{r}
-names(data)[!sapply(data, is.numeric) &
+factor_names <- names(data)[!sapply(data, is.numeric) &
               !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+factor_names
+
+# checking the levels
+lapply(data[factor_names], levels)
+
+# removing country from the list
+factor_names <- setdiff(factor_names, "country")
+
+# creating the aggregated dataset for factor variables
+data_factors <- data %>%
+  select(country, all_of(factor_names)) %>%
+  drop_na() %>% # DROPPING NAs TO "SIMULATE" IMPUTATION
+  pivot_longer(cols = -country, names_to = "variable", values_to = "level") %>%
+  drop_na(level) %>% # Drop rows where the 'level' column is NA
+  group_by(country, variable, level) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  group_by(country, variable) %>%
+  mutate(proportion = count / sum(count)) %>%
+  select(-count) %>%
+  pivot_wider(names_from = c(variable, level), values_from = proportion, names_glue = "{variable}_{level}")
+
+colSums(is.na(data_factors))
+
 ```
+
+I did several tests and still can't figure out why we are seeing NAs in some columns
+if I explicitly dropped them (twice). I'll come back to this after imputations to 
+see how it changed.
+
+But for now I guess we can join:
+```{r}
+data_aggr <- data_aggr |> 
+  left_join(data_factors, by = "country")
+
+dim(data_aggr)
+```
+
+The resulting data frame has 88 variables, I don't know if we should recode/collapse
+some factor levels if they have few answers, to reduce the number of variables.
+I'll pull imputations and get back to this (Irene).
 
 
 ## Linear regression with LASSO
@@ -2280,6 +2257,18 @@ Following this tutorial Marga sent and applying to the test data:
 <https://raffaelevacca.github.io/Intro-multilevel-with-R/>
 
 Testing a nested dataset by country
+
+```{r}
+complete_df <- data |> 
+  left_join(country_level_data, 
+            by = join_by(country == iso2c)) |> 
+  select(-c(country.y, iso3c))
+
+str(complete_df)
+```
+
+Irene: I brought this df here because Brad's the only one if seen using it, 
+but it's probably outdated.
 
 ```{r}
 # Commented the below as we are probably not gonna use it
@@ -2460,6 +2449,7 @@ list(maxfun = 100000)))
 *Potentially useful package for visualising and interpreting linear
 mixed models:* Flexplot -\> <https://github.com/dustinfife/flexplot>
 Functions to quickly visualise LMM models and compare their performance.
+
 
 broom.mixed The function broom.mixed::tidy() gives us all model
 parameters (random and fixed).
