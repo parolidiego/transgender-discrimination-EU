@@ -1,12 +1,7 @@
 ---
 title: "Survey II Assignment"
-author: "..."
-output: 
-  html_document:
-    toc: true
-editor_options: 
-  markdown: 
-    wrap: 72
+author: "Candela Gómez Blanco, Irene García-Espantaleón Artal, Diego Paroli, Bradley McKenzie"
+output: rmdformats::downcute
 ---
 
 ```{r setup, include=FALSE}
@@ -2118,7 +2113,6 @@ plot(roc_obj)
 
 coords(roc_obj, "best")
 auc(datalr$trans_docs, predicted_probs)
-
 ```
 
 ## Stepwise regression
