@@ -1281,10 +1281,10 @@ ggplot(country_long, aes(y = value, x = variable)) +
 ```
 
 ```{r}
-country_level_data <- country_level_data %>%
+country_level_data_cor <- country_level_data %>%
   inner_join(trans_docs_prop, by = c("iso2c" = "country"))
 
-cor_matrix <- cor(country_level_data %>%
+cor_matrix <- cor(country_level_data_cor %>%
                     select(gdp_pc_ppp, democracy_index, gender_inequality_index, 
                            lgbt_policy_index, trans_support),
                   use = "complete.obs")
@@ -2111,6 +2111,11 @@ minority x by country)
 Run random forest/gradient boosting/logistic regression with
 leave-one-out cross validation
 
+Leave-One-Out Cross-Validation (LOOCV):
+LOOCV is a special case of k-fold cross-validation, where k = the number of observations (n). 
+
+That means: For each observation (1 out of 28), the model is trained on the remaining 27 rows and tested on the left-out row. This process repeats 28 times (once per row). The final performance metric (e.g., accuracy, RMSE) is the average of all 28 test results.
+
 ## Aggregating individual data to country level
 
 We should be building a dataframe with 28 rows (1 per country), but
@@ -2123,64 +2128,63 @@ In the next steps we will synthesize the information from the individual
 respondents into country-level variables.
 
 Using means for numeric variables:
-```{r}
-names(select(data, where(is.numeric)))
 
-data_num <- data |> 
-  select(-serialid) |> 
+```{r}
+names(select(complete_df, where(is.numeric)))
+
+data_num <- complete_df |> 
   group_by(country) |> 
   summarise(across(where(is.numeric), ~mean(.), .names = "mean_{.col}"))
 ```
 
 As well as for dummies:
+
 ```{r}
 # searching for factor variables with two levels
-dummy_names <- names(data)[sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2)]
+dummy_names <- names(complete_df)[sapply(complete_df, is.factor) & sapply(complete_df, function(x) length(levels(x)) == 2)]
 dummy_names
 
-dummy_levels <- lapply(data[dummy_names], levels)
+dummy_levels <- lapply(complete_df[dummy_names], levels)
 dummy_levels
 
-colSums(is.na(data[dummy_names]))
+colSums(is.na(complete_df[dummy_names]))
 ```
 
-After imputations only the target variable should have NAs. 
+After imputations only the target variable should have NAs. They have already been dropped before so no variable has NAs
 
 ```{r}
-data_dummy <- data %>%
+data_dummy <- complete_df %>%
   select(country, all_of(dummy_names)) %>%
   mutate(across(all_of(dummy_names),
                 ~ case_when(
                   . %in% c("0", "1") ~ as.numeric(as.character(.)),  # convert "0"/"1" to 0/1
                   . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # convert "Yes"/"No" to 1/0
                   . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # convert "Man"/"Woman" to 1/0
-                  TRUE ~ NA_real_  # assign NA to other unexpected values
+                  TRUE ~ NA  # assign NA to other unexpected values
                 ),
                 .names = "{.col}_num"))
+
+colSums(is.na(data_dummy)) # The warning is weird as there seem to be no NAs
 ```
 
 I converted factors with 2 levels to numerical 0-1 so we can compute their means.
-I am creating a column with the proportion of missing answers per country, but if 
-we don't need it at this stage we can just remove that line. NOTE THAT the mean of
-trans_docs is not considering NAs, just Yes and No answers.
+
+Deleted the column calculating the % of NAs in trans_doc because although useful those NAs had already been dropped so it was returning all 0s
 
 ```{r}
 # country means
 data_dummy <- data_dummy %>%
   group_by(country) %>%
-  mutate(trans_docs_na = sum(is.na(trans_docs_num)) / n()) %>% # calculating proportion of NAs
   summarise(
     across(ends_with("_num"), ~ mean(.x, na.rm = TRUE)),
-    trans_docs_na = first(trans_docs_na),
     .groups = "drop"
   )
-
-summary(data_dummy$trans_docs_na)
-
 
 # substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
 data_dummy <- data_dummy %>%
   rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
+
+colSums(is.na(data_dummy))
 ```
 
 Now we can join the two datasets.
@@ -2193,22 +2197,20 @@ data_aggr <- data_num %>%
 The next variables are factor with >2 levels:
 
 ```{r}
-factor_names <- names(data)[!sapply(data, is.numeric) &
-              !(sapply(data, is.factor) & sapply(data, function(x) length(levels(x)) == 2))]
+factor_names <- names(complete_df)[!sapply(complete_df, is.numeric) &
+              !(sapply(complete_df, is.factor) & sapply(complete_df, function(x) length(levels(x)) == 2))]
 factor_names
 
 # checking the levels
-lapply(data[factor_names], levels)
+lapply(complete_df[factor_names], levels)
 
 # removing country from the list
 factor_names <- setdiff(factor_names, "country")
 
 # creating the aggregated dataset for factor variables
-data_factors <- data %>%
+data_factors <- complete_df %>%
   select(country, all_of(factor_names)) %>%
-  drop_na() %>% # DROPPING NAs TO "SIMULATE" IMPUTATION
   pivot_longer(cols = -country, names_to = "variable", values_to = "level") %>%
-  drop_na(level) %>% # Drop rows where the 'level' column is NA
   group_by(country, variable, level) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(country, variable) %>%
@@ -2217,29 +2219,71 @@ data_factors <- data %>%
   pivot_wider(names_from = c(variable, level), values_from = proportion, names_glue = "{variable}_{level}")
 
 colSums(is.na(data_factors))
-
 ```
 
-I did several tests and still can't figure out why we are seeing NAs in some columns
-if I explicitly dropped them (twice). I'll come back to this after imputations to 
-see how it changed.
+We are seeing NAs because in not all countries are all the factors' levels represented. For example we see that social_class_The higher class of society has 3 missing values. Let's confirm that there are 3 countries in our dataframe with no observation for that level
 
-But for now I guess we can join:
+```{r}
+complete_df |> filter(social_class=="The higher class of society") |>  pull(country) |> unique() |> length()
+```
+
+Therefore those proprtions should be 0s and not NAs
+
+```{r}
+data_factors <- data_factors |>
+  mutate(across(everything(), ~replace_na(., 0)))
+```
+
+Joining all together
+
 ```{r}
 data_aggr <- data_aggr |> 
   left_join(data_factors, by = "country")
 
+colSums(is.na(data_aggr))
+
 dim(data_aggr)
 ```
 
-The resulting data frame has 88 variables, I don't know if we should recode/collapse
-some factor levels if they have few answers, to reduce the number of variables.
-I'll pull imputations and get back to this (Irene).
+The resulting data frame has 88 variables, I don't know if we should recode/collapse some factor levels if they have few answers, to reduce the number of variables.
+
+I think it is fine as long as computation times are not too long. If we see that the model take up too much time we can consider reducing the number of variables a priori, but it is better if feature selection is done by the models.
 
 
 ## Linear regression with LASSO
 
 ## Random forest
+
+```{r}
+# Define LOOCV control
+control <- trainControl(
+  method = "LOOCV",
+  verboseIter = TRUE,  # Print progress
+  returnResamp = "all" # Save all resampling results
+)
+
+# Define hyperparameter grid for Random Forest
+rf_grid <- expand.grid(
+  mtry = seq(2, ncol(data_aggr) - 1, by = 2)
+)
+# mtry the number of variables randomly sampled at each split
+
+# Train Random Forest model with hyperparameter tuning
+model <- train(
+  mean_trans_docs ~ ., 
+  data = data_aggr, 
+  method = "rf",
+  trControl = control,
+  tuneGrid = rf_grid,
+  importance = TRUE   # Calculate variable importance
+)
+
+# View results
+print(model)
+plot(model)  # Plot performance across hyperparameters
+varImpPlot(model$finalModel)  # Plot variable importance
+```
+
 
 ## Gradient boosting
 
