@@ -2486,7 +2486,7 @@ data_aggr <- data_aggr |>
   left_join(data_factors, by = "country")
 ```
 
-
+```{r}
 colSums(is.na(data_aggr))
 
 dim(data_aggr)
