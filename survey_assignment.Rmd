@@ -1,7 +1,10 @@
 ---
 title: "Survey II Assignment"
 author: "Candela Gómez Blanco, Irene García-Espantaleón Artal, Diego Paroli, Bradley McKenzie"
-output: rmdformats::downcute
+date: "`r Sys.Date()`"
+output:
+  distill::distill_article:
+    toc: true
 ---
 
 ```{r setup, include=FALSE}
@@ -48,12 +51,12 @@ library(fastDummies)
 ## Survey data
 
 ```{r}
-data_raw <- read_dta("ZA7575.dta")
+data_raw <- read_dta("data/ZA7575.dta")
 ```
 
 ## Country-level data sets
 
-This is for joins:
+This is to join various country-level dataset together:
 
 ```{r, message=FALSE}
 # building a df with country names and codes for the EU-28
@@ -62,14 +65,12 @@ codelist <- countrycode::codelist |>
   filter(!is.na(eu28)) 
 ```
 
-### GDP per capita, PPP (constant 2021 international \$)
+### GDP per capita
 
-Retrieved from the World Bank
-(<https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD>) for the year
-2019.
+This is GDP per capita, PPP (constant 2021 international \$). Retrieved from the World Bank (<https://data.worldbank.org/indicator/NY.GDP.PCAP.PP.KD>) for the year 2019.
 
 ```{r}
-gdp_data <- read_csv("gdp_pc_ppp_2021.csv", skip = 4, show_col_types = FALSE)
+gdp_data <- read_csv("data/gdp_pc_ppp_2021.csv", skip = 4, show_col_types = FALSE)
 
 head(gdp_data)
 
@@ -90,7 +91,7 @@ str(gdp_data)
 
 We now have 28 observations including the UK.
 
-### Rural population
+### Rural population - to be deleted??????
 
 Retrieved from the World Bank
 (<https://data.worldbank.org/indicator/SP.RUR.TOTL.ZS>).
@@ -98,7 +99,7 @@ Retrieved from the World Bank
 Data on the % of population living in rural areas over total population.
 
 ```{r}
-rural_data <- read_xls("rural_pop.xls", sheet = 1, range = "A4:BL270")
+rural_data <- read_xls("data/rural_pop.xls", sheet = 1, range = "A4:BL270")
 head(rural_data)
 
 # selecting only the relevant year
@@ -122,7 +123,7 @@ information on 18 different policies. It includes the legal status of
 same-sex marriage.
 
 ```{r}
-lgbt_rights_index <- read.csv("lgbt-rights-index.csv")
+lgbt_rights_index <- read.csv("data/lgbt-rights-index.csv")
 
 lgbt_rights_index <- lgbt_rights_index |> 
   filter(Year == 2019) |> 
@@ -149,7 +150,7 @@ United Nations Development. Retrieved from
 year 2019.
 
 ```{r}
-gender_index <- read_xlsx("UNDP_gender_indexes.xlsx")
+gender_index <- read_xlsx("data/UNDP_gender_indexes.xlsx")
 
 gender_index <- gender_index |>
   select(-dimension, -note, -year) |> # empty/useless columns
@@ -217,7 +218,7 @@ gender_index <- gender_index |>
 ### Economist's Democracy Index
 
 ```{r}
-democracy_index <- read_xlsx("EIU_democracy_index.xlsx", sheet = 4)
+democracy_index <- read_xlsx("data/EIU_democracy_index.xlsx", sheet = 4)
 
 # the ISO codes were lowercase which impedes the join
 democracy_index$geo <- toupper(democracy_index$geo)
@@ -247,7 +248,7 @@ democracy_index <- democracy_index |>
   select(country_name, country_code, democracy_index)
 ```
 
-#### Joining all country-level data together
+### Joining all country-level data together
 
 ```{r}
 country_level_data <- codelist |> 
@@ -263,7 +264,7 @@ str(country_level_data)
 
 # Data cleaning
 
-## Selecting relevant variables in the survey data
+## Selecting relevant variables
 
 We are discarding all variables that relate to trade and globalization
 as deemed not relevant for our analysis `qa`. We are also discarding
@@ -349,7 +350,7 @@ PERCIEVED DISCRIMINATION in country
 
 This is a question (`qc1`) about how widespread you perceived
 discrimination is in your country. It is a rather peculiar question
-because it asks individUals for perception at the country level. I think
+because it asks individuals for perception at the country level. I think
 it might be more useful (by aggregating results by country) to use it to
 build a country level indicator of perceived discrimination against
 certain minorities that are of our interest rather than use it as an
@@ -382,13 +383,10 @@ which it is worth excluding the index)
 We can also further aggregate to obtain just one score (or obtain
 religious/ethnic score etc.).
 
-Option also to discard them all (anti lgbtqi sentiment is also captured
-in the next index built from `qc15`)
-
 `qc6` also asks about discriminatory behaviors, but is about elected
 public official, it does not ask about a situation that impacts you
 personally. It also uses different categories for minorities therefore I
-prefer to use `qc12` and `qc13` rather than `qc6`
+prefer to use `qc12` and `qc13` rather than `qc6`.
 
 <br>
 
@@ -400,13 +398,9 @@ rights a person is.
 I again choose to take the mean across the different answers but we
 could also use median/mode if we think is better
 
-If we feel each or some answers are particularly useful (given they are
-closely related with our target variable) we can also use them
-separately
-
 We could also use `qc18` to try to capture anti lgbtq sentiment, but I
-preferred `qc15` as it seemed more straightforward (I therfore deleted
-`qc18`, but we can put it back if useful)
+preferred `qc15` as it seemed more straightforward (I therefore deleted
+`qc18`, but we can put it back if useful).
 
 <br>
 
@@ -414,17 +408,16 @@ MY VOICE COUNTS
 
 I guess that people that feel alienated from society and politics might
 be less likely to support lgbtq rights so I took the mean of `d72`
-question which asked whether you felt like your voice mattered
+question which asked whether you felt like your voice mattered.
 
 <br>
 
 OTHERS
 
-`qc11` is a strange question feels useless to me, I removed it for now
-but we can think about it
+`qc11` is a strange question feels useless to me, I removed it.
 
 I also removed `qc9` as I don't really know what to do with it and
-`qc17`
+`qc17`.
 
 ```{r}
 data <- data_raw |> 
@@ -461,8 +454,7 @@ data <- data_raw |>
 
 paradata <- data_raw |> 
   select(serialid, # to match it with the other data
-         p2, p3, p3r, p4, p5, # paradata)
-  )
+         p2, p3, p3r, p4, p5) # paradata)
 ```
 
 Removing some of the previously selected variables
@@ -519,19 +511,6 @@ possible encoding levels of the variable (ex.1,2,3,4 etc.) and by doing
 `names(attr(colname, "labels"))` you get back the actual meaning of
 those numbers (ex. 1 = "Yes", 2 = "No", etc.)
 
-```{r}
-# Extracting all the full names of the columns
-variable_names <- tibble(
-  var_code = names(data),
-  var_full_name = sapply(data, function(col) attr(col, "label")))
-variable_names
-```
-
-These long names df might be useful to rename the variables
-systematically all together. Remember in case we filter out variables
-after this code chunk and in case we use this df to rename variables
-that there might be disalignments.
-
 Will now look into the labels for the different levels that our factor
 variables can take:
 
@@ -567,8 +546,9 @@ is the label that we must assign to that number when we factorize
 
 ### Initial cleaning and pre-processing
 
+Recoding together Germany East and West because we are running analysis at the country level and they are coded separately.
+
 ```{r}
-# Recoding together Germany East and West because we are running analysis at the country level
 unique(data$isocntry)
 data <- data |> 
   mutate(isocntry = case_when(
@@ -639,7 +619,9 @@ data <- data |>
   mutate(n_friends_minorities = sd1_1+sd1_2+sd1_3+sd1_4+sd1_5+sd1_6+sd1_8) |> 
   relocate(n_friends_minorities, .before="sd1_1") |> 
   select(-starts_with("sd1"))
+```
 
+```{r}
 # Creating a variable that counts the number of actions against discrimination that you have taken in the last year
 data <- data |>  
   mutate(across(starts_with("qc5"), ~ if_else(.x == 1, 1, 0))) |> 
@@ -678,18 +660,18 @@ data <- data |>
 
 # I am deleting the discrimination index against young and old people
 # This is because one of the question is: how comfortable you would feel if one of your children was in a love relationship with a person from group x.
-# It is totally acceptable that people would not feel comfortable with their kid dating an old person without that accounting for being discriminatory against old people
+# It is totally acceptable that people would not feel comfortable with their kid dating an old person without that meaning that they are being discriminatory against old people
 data <- data |> 
   select(-c("old_discri", "young_discri"))
 ```
 
 ```{r}
-# Supportive of lbtq rights index
+# Supportive/anti lbtq rights index
 data <- data |> 
   mutate(across(starts_with("qc15"), ~ if_else(.x == 5, NA, .x))) |>
-  # Scale of 1 to 4, 1 = supportive, 4 = homophobic
   mutate(antilgbtq_rights = round(rowMeans(cbind(qc15_1, qc15_2, qc15_3), na.rm = TRUE), 2)) |> 
   select(-starts_with("qc15"))
+# Scale of 1 to 4, 1 = supportive, 4 = homophobic
 ```
 
 ```{r}
@@ -706,7 +688,9 @@ This should be our final selection of variables.
 We still need to rename them appropriately and check that all the NAs
 are correctly encoded by looking at the summary.
 
-Rename columns appropriately and move them around to order the dataframe
+### Further cleaning
+
+Rename columns appropriately
 
 ```{r}
 data <- data |> 
@@ -749,6 +733,8 @@ data <- data |>
   select(-disc) |> 
   relocate(suffered_discr, .before = disc_where)
 ```
+
+Move the variables around to have a ordered dataframe
 
 ```{r}
 # Relocating to have a ordered df
@@ -844,8 +830,8 @@ data |> count(religion)
 
 Now we will substitute de "Refusal" answers in the remaining variables
 as NAs. If the respondent refuses to answer it's equivalent to not
-knowing his or her answer. We exclude friends_trans because that
-category could be worth analyzing.
+knowing his or her answer. We exclude `friends_trans` because for that
+category it could be worth analyzing refusal.
 
 ```{r}
 factor_variables <- names(data)[sapply(data, is.factor)]
@@ -889,7 +875,7 @@ data should not be a huge problem
 Given the high percentage of missing values we delete `disc_where`. This
 variable was expected to have a high percentage of missingness as it is
 a question that applies only to people that have been subject to
-discrimination.
+discrimination. So it is not of huge importance
 
 The variable with the second highest number of missing data is
 `left_right`, given the importance of this variable it is probably worth
@@ -906,8 +892,6 @@ data <- data |>
   select(-c("disc_where", "disc_contact"))
 ```
 
-Not using paradata for now. We can discuss how to use it
-
 # Exploratory Data Analysis 
 
 Plotting the distribution of the numeric variables
@@ -917,6 +901,9 @@ library(e1071)
 
 # Identify numeric variables
 numeric_vars <- names(data)[sapply(data, is.numeric)]
+numeric_vars <- numeric_vars[numeric_vars != "serialid"]
+
+plot_histogram(data |> select(all_of(numeric_vars)))
 
 # Creating histogramas y calculating skweness
 for (var in numeric_vars) {
@@ -924,26 +911,18 @@ for (var in numeric_vars) {
     geom_histogram(binwidth = 1, fill = "blue", color = "black") +
     labs(title = paste("Histogram of", var), x = var, y = "Count") +
     theme_minimal()
-  print(p)
-  
-  skew <- skewness(data[[var]], na.rm = TRUE)
-  cat("Skewness of", var, ":", skew, "\n")
-  
-  # Suggest transformation if skeness is high
-  if (abs(skew) > 1) {
-    cat("--> Consider applying a logarithmic transformation to", var, "\n")
-  }
-}
+  print(p)}
 ```
 
 ## Analysis of individual-level variables
 
-We must keep in mind our Target variable is qc19 "Do you think that
+We must keep in mind our Target variable is `qc19` "Do you think that
 transgender persons should be able to change their civil documents to
 match their inner gender identity?"
 
-```{r}
-data_percent <- data |> 
+```{r, fig.height=5}
+data_percent <- data |>
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |> 
   group_by(trans_docs) |> 
   summarise(count = n()) |> 
   mutate(percentage = count / sum(count) * 100)
@@ -969,33 +948,38 @@ civil documents. However, there is also a significant opposition
 this distribution along the variables we consider to be most important
 for our analysis.
 
---\> When we turned DK into NAs for all the factor variables, we also
-changed it for qc19 (now trans_docs). We should keep throughout our
-analysis in mind that NAs for qc19 are actually DK. Later we can code it
-as DK instead of NAs to have better graphs.
-
 ### Sociodemographic variables
 
 #### Gender
 
 ```{r}
 data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |> 
   count(trans_docs, gender, name = "n") |> 
   group_by(gender) |>  
-  mutate(percentage = n / sum(n))  
+  mutate(percentage = n / sum(n))
 
-ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = gender)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+ggplot(data_summary, aes(x = gender, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by gender",
-    x = "Support for trans people changing their civil documents",
-    y = "Percentage within Gender",
-    fill = "Gender"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "Gender",
+    y = "Proportion of Responses",
+    fill = ""
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 
 # Crear una tabla de contingencia
 contingency_table <- table(data$gender, data$trans_docs)
@@ -1014,17 +998,28 @@ women more supportive
 
 ```{r}
 data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   mutate(age_bin = cut(age, breaks = seq(min(age, na.rm = TRUE), max(age, na.rm = TRUE), by = 10), include.lowest = TRUE)) |> 
-  drop_na(age_bin) |> # There are 4 observations above 95 y.o. that do not fall within any of the previously difined bins. Given their low number we drop them
+  # There are 4 observations above 95 y.o. that do not fall within any of the previously difined bins. Given their low number we drop them
+  drop_na(age_bin) |> 
   count(age_bin, trans_docs) |> 
   group_by(age_bin) |> 
-  mutate(percentage = n / sum(n) * 100) |>   # Compute percentages
+  mutate(percentage = n / sum(n) * 100) |>  
   ggplot(aes(x = age_bin, y = percentage, fill = trans_docs)) +
   geom_bar(stat = "identity", position = "stack") +
-  coord_flip() +  # Horizontal bars
-  labs(x = "Age Bins", y = "Percentage", fill = "Trans Docs",
-       title = "Stacked Horizontal Bar Plot of Trans Docs by Age Group") +
-  theme_minimal()
+  coord_flip() +
+  labs(x = "Age Bins", y = "Proportion of responses", fill = "",
+       title = "Support for being able to change gender on official documents") +
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
+  ) +
+  theme_minimal() +
+   theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
 ```
 
 Younger people seem more likely to support the right for transgender people to have their gender changed on official documents. 
@@ -1037,24 +1032,28 @@ So how would that distribution look if we get rid of NAs
 data |> 
   drop_na(trans_docs) |> 
   mutate(age_bin = cut(age, breaks = seq(min(age, na.rm = TRUE), max(age, na.rm = TRUE), by = 10), include.lowest = TRUE)) |> 
-  drop_na(age_bin) |> # There are 4 observations above 95 y.o. that do not fall within any of the previously difined bins. Given their low number we drop them
+  # There are 4 observations above 95 y.o. that do not fall within any of the previously difined bins. Given their low number we drop them
+  drop_na(age_bin) |> 
   count(age_bin, trans_docs) |> 
   group_by(age_bin) |> 
-  mutate(percentage = n / sum(n) * 100) |>   # Compute percentages
+  mutate(percentage = n / sum(n) * 100) |>  
   ggplot(aes(x = age_bin, y = percentage, fill = trans_docs)) +
   geom_bar(stat = "identity", position = "stack") +
-  coord_flip() +  # Horizontal bars
-  labs(x = "Age Bins", y = "Percentage", fill = "Trans Docs",
-       title = "Stacked Horizontal Bar Plot of Trans Docs by Age Group") +
-  theme_minimal()
+  coord_flip() +
+  labs(x = "Age Bins", y = "Proportion of responses", fill = "",
+       title = "Support for being able to change gender on official documents") +
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
+  ) +
+  theme_minimal() +
+   theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 We see that differences among age groups are not so evident anymore.
-
-```{r}
-sum(is.na(data$age))
-```
-
 
 #### Religiosity
 
@@ -1081,44 +1080,65 @@ underrepresented.
 
 ```{r}
 data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
+  mutate(religious_minority = fct_recode(religious_minority, "Yes" = "1", "No" = "0")) |> 
   count(trans_docs, religious_minority, name = "n") |> 
   group_by(religious_minority) |>  
   mutate(percentage = n / sum(n))  
 
-ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = religious_minority)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+ggplot(data_summary, aes(x = religious_minority, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by religious minority",
-    x = "Support for trans people changing their civil documents",
-    y = "Percentage within religious_minority",
-    fill = "religious_minority"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "Are you part of a religious minority?",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 #### Ideology
 
 ```{r}
 data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   count(trans_docs, left_right, name = "n") |> 
   group_by(left_right) |>  
   mutate(percentage = n / sum(n))  
 
-ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = left_right)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+ggplot(data_summary, aes(x = left_right, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by ideology",
-    x = "Support for trans people changing their civil documents",
-    y = "Percentage within ideology",
-    fill = "ideology"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "Political affiliation",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 Stronger left-wing support for trans rights. Right-wing respondents are
@@ -1128,24 +1148,33 @@ among those without ideological alignment.
 #### Social class
 
 ```{r}
-
 data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   count(trans_docs, social_class, name = "n") |> 
   group_by(social_class) |>  
   mutate(percentage = n / sum(n))  
 
-ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = social_class)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+ggplot(data_summary, aes(x = social_class, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by social class",
-    x = "Support for trans people changing their civil documents",
-    y = "Percentage within social class",
-    fill = "social class"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "You identify as:",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 Although D63 of the questionnaire measures (oneself's and one's
@@ -1169,22 +1198,32 @@ Support doesn't seem to be related to education.
 
 ```{r}
 data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   count(trans_docs, community, name = "n") |> 
   group_by(community) |>  
   mutate(percentage = n / sum(n))  
 
-ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = community)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+ggplot(data_summary, aes(x = community, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by area of residence",
-    x = "Support for trans people changing their civil documents",
-    y = "Percentage within area of residence",
-    fill = "area of residence"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "Place of residence",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 Support does not vary much by area of residence.
@@ -1195,23 +1234,32 @@ Support does not vary much by area of residence.
 
 ```{r}
 data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   count(trans_docs, friends_trans, name = "n") |> 
   group_by(friends_trans) |>  
   mutate(percentage = n / sum(n))  
 
-ggplot(data_summary, aes(x = trans_docs, y = percentage, fill = friends_trans)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+ggplot(data_summary, aes(x = friends_trans, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by haivng trans friends",
-    x = "Support for trans people changing their civil documents",
-    y = "Percentage within groups",
-    fill = "Has Trans Friends"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
-
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "Do you know a transgender person?",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 Having trans friends is associated with a higher support, while those
@@ -1219,9 +1267,6 @@ who refuse to disclose their connections to trans people tend to oppose
 more.
 
 ## Country-level EDA
-
-Replication of the plot in Marga's document. This is probably not needed
-in the final version of the document.
 
 ```{r}
 country_support <- data %>%
@@ -1238,36 +1283,7 @@ country_support <- data %>%
   group_by(country) %>%
   mutate(proportion = (count / sum(count))*100) %>%
   ungroup()
-
-ggplot(country_support, aes(x = factor(country, levels = country_support %>%
-                                       filter(trans_docs == "1") %>%
-                                       arrange(desc(proportion)) %>%
-                                       pull(country)), 
-                           y = proportion,
-                           fill = factor(trans_docs, levels = c("1", "2", "DK")))) +
-  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
-  scale_fill_manual(values = c("1" = "#497ba9", "2" = "#d56e6e", "DK" = "#9a9595"),
-                   name = "",
-                   labels = c("Yes", "No", "Don't know")) +
-  geom_text(aes(label = round(proportion)), 
-          position = position_stack(reverse = TRUE, vjust = 0.5),
-          size = 3.5, color = "white") +
-  labs(
-    title = "QC9: Do you think transgender persons should be able to change their civil documents to match their inner gender identity?",
-    x = "", 
-    y = ""
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1),
-        axis.text.y = element_blank(),
-        axis.ticks.y = element_blank(),
-        plot.title = element_text(size = 9),
-        panel.grid.major.y = element_blank(),
-        legend.position = "bottom")
 ```
-
-There are some mismatches, I guess the data might have become distorted
-at some point during processing, but I don't know when.
 
 ```{r}
 trans_docs_prop <- country_support %>%
@@ -1334,20 +1350,6 @@ reliability of our analysis too much.
 ## Paradata
 
 ```{r}
-# Extracting labels in paradata
-list_label_tibbles_paradata <- lapply(names(paradata), function(col_name) {
-  labels <- attr(paradata[[col_name]], "labels")  
-  name_labels <- names(labels)  
-  if (!is.null(labels)) {
-    tibble(name_labels = name_labels, labels = labels)
-  } else {
-    NULL
-  }
-})
-
-# Asign names to list elements
-list_label_tibbles_paradata <- setNames(list_label_tibbles_paradata, names(paradata))
-
 # Convert into factor
 paradata <- paradata %>%
   mutate(across(where(~ !is.null(attr(., "labels"))), labelled::to_factor))
@@ -1399,32 +1401,33 @@ CrossTable(merged_paradata$p3r, merged_paradata$trans_docs,
 Respondent cooperation
 
 ```{r}
-
 data_summary <- merged_paradata |> 
+  mutate(trans_docs = fct_recode(trans_docs, "Don't Know" = "DK"))|>
   count(p5, trans_docs, name = "n") |> 
   group_by(p5) |>  
   mutate(percentage = n / sum(n))  
 
 ggplot(data_summary, aes(x = p5, y = percentage, fill = trans_docs)) +
-  geom_bar(stat = "identity", position = "dodge") +  
+  geom_bar(stat = "identity", position = "fill") +
   geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
-            position = position_dodge(width = 0.9), vjust = -0.2, size = 4) +  
+            position = position_stack(vjust = 0.5), size = 4) + 
   scale_y_continuous(labels = percent_format()) + 
-  labs(
-    title = "Distribution of support by Respondent cooperation",
-    x = "Respondent cooperation",
-    y = "Percentage within groups",
-    fill = "Support"
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
   ) +
-  theme_minimal()
-
-
-# Calcular porcentajes
-plot_data <- merged_paradata %>%
-  group_by(p5, trans_docs) %>%
-  summarise(count = n(), .groups = 'drop') %>%
-  mutate(percentage = count / sum(count) * 100)
-
+  labs(
+    title = "Support for being able to change gender on official documents",
+    x = "Do you know a transgender person?",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
 ```
 
 Respondents who engaged better in the survey were more likely to express
