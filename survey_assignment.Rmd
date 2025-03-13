@@ -45,6 +45,7 @@ library(randomForest)
 library(pROC)
 library(mice)
 library(glmnet)
+library(fastDummies)
 ```
 
 # Loading data
@@ -1017,13 +1018,48 @@ women more supportive
 #### Age
 
 ```{r}
-#ANOVA
-anova <- aov(age ~ trans_docs, data = data)
-summary(anova)
+data |> 
+  mutate(age_bin = cut(age, breaks = seq(min(age, na.rm = TRUE), max(age, na.rm = TRUE), by = 10), include.lowest = TRUE)) |> 
+  drop_na(age_bin) |> # There are 4 observations above 95 y.o. that do not fall within any of the previously difined bins. Given their low number we drop them
+  count(age_bin, trans_docs) |> 
+  group_by(age_bin) |> 
+  mutate(percentage = n / sum(n) * 100) |>   # Compute percentages
+  ggplot(aes(x = age_bin, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "stack") +
+  coord_flip() +  # Horizontal bars
+  labs(x = "Age Bins", y = "Percentage", fill = "Trans Docs",
+       title = "Stacked Horizontal Bar Plot of Trans Docs by Age Group") +
+  theme_minimal()
 ```
 
-There are significant differences between the groups defined by
-trans_docs.
+Younger people seem more likely to support the right for transgender people to have their gender changed on official documents. 
+
+We also notice a big increase of NAs for older people, meaning older people are less likely to respond to this question (because of unfamiliarity with the topic maybe)
+
+So how would that distribution look if we get rid of NAs
+
+```{r}
+data |> 
+  drop_na(trans_docs) |> 
+  mutate(age_bin = cut(age, breaks = seq(min(age, na.rm = TRUE), max(age, na.rm = TRUE), by = 10), include.lowest = TRUE)) |> 
+  drop_na(age_bin) |> # There are 4 observations above 95 y.o. that do not fall within any of the previously difined bins. Given their low number we drop them
+  count(age_bin, trans_docs) |> 
+  group_by(age_bin) |> 
+  mutate(percentage = n / sum(n) * 100) |>   # Compute percentages
+  ggplot(aes(x = age_bin, y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "stack") +
+  coord_flip() +  # Horizontal bars
+  labs(x = "Age Bins", y = "Percentage", fill = "Trans Docs",
+       title = "Stacked Horizontal Bar Plot of Trans Docs by Age Group") +
+  theme_minimal()
+```
+
+We see that differences among age groups are not so evident anymore.
+
+```{r}
+sum(is.na(data$age))
+```
+
 
 #### Religiosity
 
@@ -1574,7 +1610,6 @@ dk_target |>
         axis.title.x = element_blank()) +
   scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
   labs(y = "Proportion of NA responses")
-
 ```
 
 If all NA responses to the target are removed, this is how much the
@@ -1584,7 +1619,6 @@ variable looks by country. The NA vote removal, makes our differences in
 Yes/No differences appear larger.
 
 ```{r}
-
 data |> 
   group_by(country) |> 
   summarise(yes_count = sum(trans_docs == "Yes", na.rm=TRUE),
@@ -1600,8 +1634,6 @@ data |>
   scale_y_continuous(labels = scales::percent_format(scale = 1),
                      limits = c(0,100)) + 
   labs(title ="Support for transgender rights to legally change documents, with and without NA's")
-
-
 ```
 
 ### Check correlation with DK of target
@@ -1637,7 +1669,6 @@ cat_results <- tibble(variable = names(cramers_v_results),
        cramers_v = unlist(cramers_v_results)) |> 
   arrange(desc(cramers_v))
 cat_results
-
 ```
 
 This shows all of the factors have quite low association with the NA
@@ -1667,7 +1698,6 @@ cor_results <- tibble(variable = names(cor_results),
        cor = unlist(cor_results)) |> 
   arrange(cor)
 cor_results
-
 ```
 
 Again, this is not too much cause for concern. We only have around 10%
@@ -1682,10 +1712,8 @@ above +/- 9.5% correlation and above 10% cramers V) and also include
 gender and country.
 
 ```{r}
-
 cor_results |> filter(cor > 0.09 | cor < -0.9) |> pull(variable)
 cat_results |> filter(cramers_v >0.1) |> pull(variable)
-
 ```
 
 Now model with those variables to see if they are significant in
@@ -1716,7 +1744,6 @@ broom::tidy(aic_1) |>
   filter(p.value<0.05) |> 
   mutate(oddsratio = exp(estimate)) |> 
   select(term, oddsratio, p.value)
-  
 ```
 
 The best model is the one without age but includes age\^2. So we run the
@@ -1739,11 +1766,9 @@ interpretation of countries as that is covered above):
     you reported being in the lower middle, middle or upper middle
     class. I.e. working class were less likely to answer this question.
 
-\~\~\~\~\~\~\~\~\~ SHOULD WE DELETE THIS SECTION ON UNDERSAMPLING/CLASS
-IMBALANCE\~\~\~\~
+<br>
 
 Below is an option using undersampling which is probably more legit too.
-maybe good to include if we aren't doing in other sections.
 
 ```{r}
 # split to test and training
@@ -1796,8 +1821,6 @@ rfunder
 
 We see that only around 5% of the variance is explained.
 
-\~\~\~ REMOVE TO HERE IF WE DON'T WANT THE ABOVE
-
 ### Testing the NA values against paradata
 
 Here we extend the model to see if paradata is related to changed
@@ -1839,7 +1862,6 @@ for (variable in para_vars) {
 tibble(variable = names(cramers_v_results),
        cramers_v = unlist(cramers_v_results)) |> 
   arrange(desc(cramers_v))
-
 ```
 
 Again, we see low correlation with the paradata and cramers V.
@@ -1888,7 +1910,6 @@ imputation_data <- data |>
   select(-c(serialid, country, trans_docs))
 
 # Running it with the default methods
-# We can change m in case we decide to use pool later instead of just completing 1 df)
 imputed_data <- mice(imputation_data, m = 1, seed=1234)
 # By default: numerical variables -> pmm, binary factors -> logreg, > 2 levels factors -> polyreg
 imputed_data$method
@@ -1905,6 +1926,8 @@ final_data <- final_data |>
          "country" = "data$country") |> 
   relocate(country, .before = everything())
 ```
+
+We know that it would be better to impute multiple datasets and then pool the results of different regressions on those different datasets together, but running more than one multilevel regression would be too computationally intensive and so we are not able to do this.
 
 # Joining together all our data
 
@@ -1943,54 +1966,41 @@ datalr <- final_data |>
   # Selecting only predictor variables
   select(-"country") |> 
   # Scale variables 
-  mutate(across(where(is.numeric), scale))
+  mutate(across(where(is.numeric), scale)) |> 
+  # Transforming target to binary numeric Yes=1, No=0
+  mutate(trans_docs = as.numeric(trans_docs == "Yes"))
   
-# now run the full model, include age^2 as is good practice
-simple_logistic <- glm(trans_docs ~ . + I(age*age), data = datalr, family = binomial(link = "logit"))
+# now run the full model
+simple_logistic <- glm(trans_docs ~ ., data = datalr, family = binomial(link = "logit"))
 
 # Save the summary
 logistic_summary <- summary(simple_logistic)
 
-# Get all the p-values
-p_values <- logistic_summary$coefficients[, 4]
-
-# Extract the significant ones
-significant_var <- p_values[p_values < 0.05]
-significant_var
-
 # create a tibble to more easily search through significant variables
-tibble(
+logistic_results <- tibble(
   broom::tidy(simple_logistic) |>
     filter(p.value<0.05) |>
     mutate(oddsratio = exp(estimate)) |>
-    select(term, oddsratio, p.value)
-)
-
-
+    select(term, estimate, oddsratio, p.value) |> 
+    arrange(oddsratio))
+logistic_results
 ```
 
-#### Interpreting the coefficients of these models: 
+##### Interpeting results
 
-To interpret the coefficients as odds ratios, anything above 1 indicates they are more likely to oppose the changes to civil documents for trans people. This is because no support are coded as 1s and support are coded as 0s.
-
-```{r}
-levels(datalr$trans_docs)
-table(datalr$trans_docs)
-# Yes = failure = 0
-# No = success = 1
-```
+To interpret the coefficients as odds ratios, anything above 1 indicates they are more likely to support the changes to civil documents for trans people. 
 
 The logistic regression shows that 26 statistically significant terms. This includes factors variables with multiple terms. Of our 29 scaled variables, the significant variables (at the 5% level) are:
 
 More likely to OPPPOSE the right to change civil documents for trans people, include:  
 - men (compared to wom)
 - younger people 
-- people who oppose legal rights to change gender docs (compared to those who do)
+- people who oppose legal rights to add a third-gender in official docs (compared to those who do)
 - people who refused to answer whether they have trans friends (compared to those who do)
 - people who are more financially sound (have fewer bill issues)
 - people not satisfied with their life (compared to those who are 'very satisfied')
 - people who identified as roma or an ethnic minority
-- people who had a higher discrimination score
+- people who are more discriminatory against minorities
 
 More likely to SUPPORT the the right
 - older people 
@@ -2003,9 +2013,10 @@ More likely to SUPPORT the the right
 - people who reported being more left wing (compared to right wing)
 - people who had friends in minority groups.
 
-##### Interpreting log-odds of scaled data
+<br>
 
 _NUMERIC VARIABLES_
+
 *Without scaling*, we interpret logistic regression output as: 
 
 `coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
@@ -2030,15 +2041,13 @@ head(exp(coef(simple_logistic)))
 
 _FACTOR VARIABLES_
 
-Factor variables when exponentialised give the likelihood to respond no/yes relative to the base group in the factor variable. We use the function `factors` to view the levels and identify the base group. For example, if the  to log-odds of A large town, (exp(CommunityLarge town)) = 1.04 and iis 
-
+Factor variables when exponentialised give the likelihood to respond no/yes relative to the base group in the factor variable. We use the function `factors` to view the levels and identify the base group.
 
 To assist with interpretation of factor outputs: 
 
 Here is a function to identify all the base levels in each factor group. Useful to refer to during analysis of different logistic models. 
 
 ```{r}
-
 extract_base_groups <- function(df) {
 
   # extract factor vars only and list to print values
@@ -2088,7 +2097,7 @@ predicted_probs <- simple_logistic$fitted.values
 head(predicted_probs)
 
 # Turning them to classes using custom threshold
-predicted_classes <- ifelse(predicted_probs > 0.5, "No", "Yes")
+predicted_classes <- ifelse(predicted_probs > 0.5, 1, 0)
 head(predicted_classes)
 ```
 
@@ -2096,11 +2105,9 @@ Get the confusion matrix:
 
 ```{r}
 confusionMatrix(as.factor(datalr$trans_docs), as.factor(predicted_classes))
-
 ```
 
 The simple model predicted people's response with 82% accuracy. That is quite decent for a basic first model. This shows the response is quite explainable with the data we have. The model is slightly better at predicting those who do not support than those who do. Seen by higher specificity than sensitivity (85% vs 77%). But they are both comparable which is good and confirms we don't have great class imbalance. 
-
 
 ```{r}
 roc_obj <- roc(datalr$trans_docs, predicted_probs)
@@ -2130,6 +2137,8 @@ The stepwise regression has 19 of the 29 variables included in it's best model. 
 anova(simple_logistic, stepAIC)
 ```
 
+DIEGO: ask for an explanation of this
+
 ## Lasso regularization
 
 We still have too many variables for a mixed model. So here we will use Lasso to keep only our most important variables for the mixed models. 
@@ -2137,28 +2146,57 @@ We still have too many variables for a mixed model. So here we will use Lasso to
 Without this step, the glmer stage is too computationally expensive. 
 
 ```{r}
-# extract the significant variables from the stepAIC model
+lasso_data <- final_data |> 
+  # Doing same preprocessing as done for simple logistic
+  drop_na() |> 
+  select(-"country") |> 
+  mutate(across(where(is.numeric), scale)) |> 
+  mutate(trans_docs = as.numeric(trans_docs == "Yes")) 
 
-vars <- all.vars(formula(stepAIC))
+# Dummifying all levels to see whether some levels are particularly important
+lasso_data <- lasso_data %>% 
+  dummy_cols(select_columns = names(.)[sapply(., is.factor)],
+             remove_selected_columns = TRUE,
+             remove_first_dummy = TRUE)
+  
+
 # Convert data into a matrix for glmnet
-#x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
-x_lasso <- as.matrix(datalr[, vars[vars != "trans_docs"]]) 
-y_lasso <- as.matrix(datalr$trans_docs)
+x_lasso <- lasso_data |> select(-trans_docs) |> as.matrix() 
+y_lasso <- lasso_data |> select(trans_docs) |> as.matrix()
+
+set.seed(123)
+
+# Define lamdas
+lambda_seq <- 10^seq(-2, -5, length.out = 100)
 
 # Fit the Lasso model (alpha = 1 for Lasso regularization)
-lasso_model <- cv.glmnet(x_lasso, y_lasso, family = "binomial", alpha = 1)
+lasso_model <- cv.glmnet(x_lasso, y_lasso, family = "binomial", alpha = 1, lambda = lambda_seq)
+
+lasso_model$lambda.1se # The largest lambda within one standard error of lambda.min. This results in a simpler model with fewer selected features.
+lasso_model$lambda.min
 
 # Get all the coefficients
-coefficients <- coef(lasso_model, s = "lambda.min")
-coefficients
+coefficients <- coef(lasso_model, s = "lambda.1se")
 # Filter for the non-zero ones
 non_zero_features <- rownames(coefficients)[which(coefficients != 0)]
 non_zero_features
 ```
 
-Here we have the reduced model with lasso. It gives us 8 variables now. We will inc
+Lasso includes variables similar to what was suggested by our initial logistic regression and the subsequent stepwise.
 
-Brad --> This is a really useful step because the glmer runs so long. But I'm struggling to interpert because the significant variables aren't that intuitive and don't agree as much with the logistic. E.g. variables like gender, 
+In particular we can see again that:
+
+1) `age` is relevant
+
+2) `gender` is relevant
+
+3) It matters whether you have friends that belong to minorites (`n_friends_minorities`)
+
+
+
+Also `ant
+
+
 
 
 #### Final variable selection
@@ -2539,8 +2577,8 @@ plot(importance, top = 20)
 
 # Get the coefficients of the best model
 best_model <- lasso_model$finalModel
-coef_lasso <- coef(best_model, s = best_lambda)
-print(coef_lasso)
+#coef_lasso <- coef(best_model) giving me errors
+#print(coef_lasso)
 
 # Calculate predictions and residuals
 predictions <- predict(lasso_model, data_lasso)
@@ -2573,15 +2611,17 @@ plot(predictions, residuals,
 abline(h = 0, col = "red")
 
 # Combine country names with predictions
-country_predictions <- data.frame(
-  country = data_aggr$country,
-  actual = target,
-  predicted = predictions
-)
+# Giving me errrors
+# country_predictions <- data.frame(
+#   country = data_aggr$country,
+#   actual = target,
+#   predicted = predictions
+# )
 
-# Sort by prediction (descending)
-country_predictions <- country_predictions[order(country_predictions$predicted, decreasing = TRUE), ]
-print(country_predictions)
+# # Sort by prediction (descending)
+# Giving me errors
+# country_predictions <- country_predictions[order(country_predictions$predicted, decreasing = TRUE), ]
+# print(country_predictions)
 
 ```
 
