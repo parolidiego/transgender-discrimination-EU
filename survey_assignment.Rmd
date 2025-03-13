@@ -2499,7 +2499,7 @@ clean the names of the variables that were glued from variable_level.
 ## Linear regression with LASSO
 
 ```{r}
-data_lasso <- data_aggr |> 
+data_models <- data_aggr |> 
   select(-country)
 
 # Define the leave-one-out cross-validation control
@@ -2508,80 +2508,121 @@ ctrl <- trainControl(
   verboseIter = TRUE
 )
 
-# Set up the grid of lambda values for Lasso
-lambda_grid <- 10^seq(-3, 3, length = 100)
+# # LASSO
+# # Set up the grid of lambda values for Lasso
+# lambda_grid <- 10^seq(-3, 3, length = 100)
+# 
+# # Train the Lasso model with LOOCV
+# lasso_model <- train(
+#   mean_trans_docs ~ ., 
+#   data = data_models, 
+#   method = "glmnet",
+#   preProc=c('scale','center'),
+#   trControl = ctrl,
+#   tuneGrid = expand.grid(
+#     alpha = 1,  # 1 for Lasso
+#     lambda = lambda_grid
+#   ),
+#   importance = TRUE,
+#   metric = "RMSE"
+# )
+# # Print the best tuning parameter (lambda)
+# print(lasso_model$bestTune)
+# 
+# # Summarize the final model
+# print(lasso_model)
+# 
+# # Examine variable importance
+# importance <- varImp(lasso_model, scale = FALSE)
+# print(importance)
+# plot(importance, top = 20)
+# 
+# # Get the coefficients of the best model
+# best_model <- lasso_model$finalModel
+# coef_lasso <- coef(best_model, s = best_lambda)
+# print(coef_lasso)
 
-# Train the Lasso model with LOOCV
-lasso_model <- train(
+
+# ELASTIC 
+elastic_grid <- expand.grid(
+  alpha = seq(0, 1, length = 10),  # Search from Ridge (0) to Lasso (1)
+  lambda = 10^seq(-3, 3, length = 100)  # Regularization strength
+)
+
+# Train the Elastic Net model
+elastic_net_model <- train(
   mean_trans_docs ~ ., 
-  data = data_lasso, 
+  data = data_models, 
   method = "glmnet",
-  preProc=c('scale','center'),
+  preProcess = c("center", "scale"),
   trControl = ctrl,
-  tuneGrid = expand.grid(
-    alpha = 1,  # 1 for Lasso
-    lambda = lambda_grid
-  ),
-  importance = TRUE,
+  tuneGrid = elastic_grid,
   metric = "RMSE"
 )
 
-# Print the best tuning parameter (lambda)
-print(lasso_model$bestTune)
+# Display the best alpha and lambda values
+print(elastic_net_model$bestTune)
 
-# Summarize the final model
-print(lasso_model)
+# Plot the results to see the optimal alpha and lambda
+plot(elastic_net_model)
 
-# Examine variable importance
-importance <- varImp(lasso_model, scale = FALSE)
-print(importance)
-plot(importance, top = 20)
+# Make predictions on the dataset
+predictions <- predict(elastic_net_model, newdata = data_models)
 
-# Get the coefficients of the best model
-best_model <- lasso_model$finalModel
-coef_lasso <- coef(best_model, s = best_lambda)
-print(coef_lasso)
+# Evaluate model performance
+mse <- mean((predictions - data_models$mean_trans_docs)^2)
+r_squared <- 1 - sum((predictions - data_models$mean_trans_docs)^2) / sum((data_models$mean_trans_docs - mean(data_models$mean_trans_docs))^2)
 
-# Calculate predictions and residuals
-predictions <- predict(lasso_model, data_lasso)
-# Extract the actual values
-actual <- data_lasso$mean_trans_docs
-# Calculate residuals
-residuals <- actual - predictions
+# Print evaluation metrics
+print(paste("MSE:", mse))
+print(paste("R-squared:", r_squared))
 
 
-# Calculate R-squared and RMSE
-r_squared <- 1 - sum(residuals^2) / sum((actual - mean(actual))^2)
-rmse <- sqrt(mean(residuals^2))
+```
 
 
-cat("R-squared:", r_squared, "\n")
-cat("RMSE:", rmse, "\n")
-
-# Plot actual vs predicted values
-plot(actual, predictions, 
-     main = "Actual vs Predicted Values",
-     xlab = "Actual", ylab = "Predicted",
-     pch = 16, col = "blue")
-abline(0, 1, col = "red")
-
-# Plot residuals
-plot(predictions, residuals,
-     main = "Residuals vs Predicted Values",
-     xlab = "Predicted Values", ylab = "Residuals",
-     pch = 16, col = "blue")
-abline(h = 0, col = "red")
-
-# Combine country names with predictions
-country_predictions <- data.frame(
-  country = data_aggr$country,
-  actual = target,
-  predicted = predictions
-)
-
-# Sort by prediction (descending)
-country_predictions <- country_predictions[order(country_predictions$predicted, decreasing = TRUE), ]
-print(country_predictions)
+Commented bc I moved predictions to the last part.
+```{r}
+# # Calculate predictions and residuals
+# predictions <- predict(lasso_model, data_models)
+# # Extract the actual values
+# actual <- data_models$mean_trans_docs
+# # Calculate residuals
+# residuals <- actual - predictions
+# 
+# 
+# # Calculate R-squared and RMSE
+# r_squared <- 1 - sum(residuals^2) / sum((actual - mean(actual))^2)
+# rmse <- sqrt(mean(residuals^2))
+# 
+# 
+# cat("R-squared:", r_squared, "\n")
+# cat("RMSE:", rmse, "\n")
+# 
+# # Plot actual vs predicted values
+# plot(actual, predictions, 
+#      main = "Actual vs Predicted Values",
+#      xlab = "Actual", ylab = "Predicted",
+#      pch = 16, col = "blue")
+# abline(0, 1, col = "red")
+# 
+# # Plot residuals
+# plot(predictions, residuals,
+#      main = "Residuals vs Predicted Values",
+#      xlab = "Predicted Values", ylab = "Residuals",
+#      pch = 16, col = "blue")
+# abline(h = 0, col = "red")
+# 
+# # Combine country names with predictions
+# country_predictions <- data.frame(
+#   country = data_aggr$country,
+#   actual = target,
+#   predicted = predictions
+# )
+# 
+# # Sort by prediction (descending)
+# country_predictions <- country_predictions[order(country_predictions$predicted, decreasing = TRUE), ]
+# print(country_predictions)
 
 ```
 
@@ -2589,9 +2630,10 @@ print(country_predictions)
 ## Random forest
 
 ```{r}
+# I CHANGED THE DATA USED TO DATA_MODELS SO I COULD KEEP THE COUNTRY COLUMN FOR PREDICTIONS
 
-data_aggr <- data_aggr |> 
-  select(-country)
+# data_aggr <- data_aggr |> 
+#   select(-country)
 
 # Define LOOCV control
 control <- trainControl(
@@ -2602,14 +2644,14 @@ control <- trainControl(
 
 # Define hyperparameter grid for Random Forest
 rf_grid <- expand.grid(
-  mtry = seq(2, ncol(data_aggr) - 1, by = 2)
+  mtry = seq(2, ncol(data_models) - 1, by = 2)
 )
 # mtry the number of variables randomly sampled at each split
 
 # Train Random Forest model with hyperparameter tuning
 rf_model <- train(
   mean_trans_docs ~ ., 
-  data = data_aggr, 
+  data = data_models, 
   method = "rf",
   preProc=c('scale','center'),
   trControl = control,
@@ -2636,13 +2678,133 @@ gbm_grid <- expand.grid(
 
 gbm_model <- train(
   mean_trans_docs ~ ., 
-  data = data_aggr, 
+  data = data_models, 
   method = "gbm",
   preProc = c('scale', 'center'),
   trControl = control,
   tuneGrid = gbm_grid)
 ```
 
+### Comparing predictions
+
+```{r}
+elastic_pred <- predict(elastic_net_model, data_aggr)
+rf_pred <- predict(rf_model, data_aggr)
+gbm_pred <- predict(gbm_model, data_aggr)
+
+# Actual values
+actual <- data_aggr$mean_trans_docs
+
+# Create a data frame with all predictions and actual values
+all_predictions <- data.frame(
+  country = data_aggr$country,
+  actual = actual,
+  elastic_net = elastic_pred,
+  random_forest = rf_pred,
+  gradient_boosting = gbm_pred
+)
+
+# Calculate errors for each model
+all_predictions$elastic_error <- abs(all_predictions$actual - all_predictions$elastic_net)
+all_predictions$rf_error <- abs(all_predictions$actual - all_predictions$random_forest)
+all_predictions$gbm_error <- abs(all_predictions$actual - all_predictions$gradient_boosting)
+
+# Calculate performance metrics for each model
+calculate_metrics <- function(actual, predicted) {
+  residuals <- actual - predicted
+  r_squared <- 1 - sum(residuals^2) / sum((actual - mean(actual))^2)
+  rmse <- sqrt(mean(residuals^2))
+  mae <- mean(abs(residuals))
+  
+  return(c(R_squared = r_squared, RMSE = rmse, MAE = mae))
+}
+
+# Get metrics for each model
+elastic_metrics <- calculate_metrics(actual, elastic_pred)
+rf_metrics <- calculate_metrics(actual, rf_pred)
+gbm_metrics <- calculate_metrics(actual, gbm_pred)
+
+# Combine metrics
+model_metrics <- rbind(
+  Elastic_Net = elastic_metrics,
+  Random_Forest = rf_metrics,
+  Gradient_Boosting = gbm_metrics
+)
+
+# Print performance comparison
+print(model_metrics)
+
+# Sort predictions by actual values (descending)
+sorted_predictions <- all_predictions[order(all_predictions$actual, decreasing = TRUE), ]
+
+# Print sorted predictions
+print(sorted_predictions[, c("country", "actual", "elastic_net", "random_forest", "gradient_boosting")])
+
+# Visualize predictions across countries
+# Reshape the data for plotting
+
+plot_data <- sorted_predictions %>%
+  select(country, actual, elastic_net, random_forest, gradient_boosting) %>%
+  gather(key = "model", value = "prediction", -country, -actual)
+
+# Create plot
+ggplot(plot_data, aes(x = reorder(country, -actual), y = prediction, fill = model)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  geom_point(aes(y = actual), color = "black", size = 2) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  labs(title = "Model Predictions vs Actual Values by Country",
+       x = "Country", y = "Proportion Supporting Trans Document Changes") +
+  scale_fill_brewer(palette = "Set1")
+
+# Create a scatterplot of actual vs predicted for each model
+ggplot(plot_data, aes(x = actual, y = prediction, color = model)) +
+  geom_point(size = 3, alpha = 0.7) +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed") +
+  facet_wrap(~model) +
+  theme_minimal() +
+  labs(title = "Actual vs Predicted Values by Model",
+       x = "Actual Values", y = "Predicted Values")
+
+# Find which model performed best for each country
+all_predictions$best_model <- apply(all_predictions[, c("elastic_error", "rf_error", "gbm_error")], 1, 
+                                   function(x) c("Elastic Net", "Random Forest", "Gradient Boosting")[which.min(x)])
+
+# Count how many countries each model performed best on
+table(all_predictions$best_model)
+```
+
+Checks for overfitting in GBM:
+```{r}
+# Calculate residuals
+gbm_residuals <- actual - gbm_pred
+
+# Create a dataframe
+residuals_df <- data.frame(actual, gbm_residuals)
+
+# Plot residuals
+ggplot(residuals_df, aes(x = actual, y = gbm_residuals)) +
+  geom_point(color = "red", alpha = 0.7) +
+  geom_hline(yintercept = 0, linetype = "dashed") +
+  theme_minimal() +
+  labs(title = "Residuals Plot for Gradient Boosting",
+       x = "Actual Values", y = "Residuals")
+
+
+
+library(gbm)
+gbm_importance <- varImp(gbm_model, scale = FALSE)
+
+# Plot importance
+ggplot(gbm_importance, aes(x = reorder(rownames(gbm_importance), Overall), y = Overall)) +
+  geom_col(fill = "blue") +
+  coord_flip() +
+  theme_minimal() +
+  labs(title = "Feature Importance - Gradient Boosting",
+       x = "Features", y = "Importance")
+
+gbm_importance
+```
 
 # Brad's theory notes
 
