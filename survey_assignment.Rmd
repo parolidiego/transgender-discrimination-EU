@@ -1282,10 +1282,10 @@ ggplot(country_long, aes(y = value, x = variable)) +
 ```
 
 ```{r}
-country_level_data <- country_level_data %>%
+country_level_data_cor <- country_level_data %>%
   inner_join(trans_docs_prop, by = c("iso2c" = "country"))
 
-cor_matrix <- cor(country_level_data %>%
+cor_matrix <- cor(country_level_data_cor %>%
                     select(gdp_pc_ppp, democracy_index, gender_inequality_index, 
                            lgbt_policy_index, trans_support),
                   use = "complete.obs")
@@ -1943,7 +1943,7 @@ To be finished...
 
 ### Simple logistic regression
 
-I am using only individual level data for now
+I am using only individual level data for now. This is a simple model to see at the global level i.e. no country level control, which variables are significant. The numeric data has also been scaled. 
 
 ```{r}
 datalr <- final_data |> 
@@ -1954,7 +1954,8 @@ datalr <- final_data |>
   # Scale variables 
   mutate(across(where(is.numeric), scale))
   
-simple_logistic <- glm(trans_docs ~ ., data = datalr, family = binomial(link = "logit"))
+# now run the full model, include age^2 as is good practice
+simple_logistic <- glm(trans_docs ~ . + I(age*age), data = datalr, family = binomial(link = "logit"))
 
 # Save the summary
 logistic_summary <- summary(simple_logistic)
@@ -1965,20 +1966,68 @@ p_values <- logistic_summary$coefficients[, 4]
 # Extract the significant ones
 significant_var <- p_values[p_values < 0.05]
 significant_var
+
+# create a tibble to more easily search through significant variables
+tibble(
+  broom::tidy(simple_logistic) |>
+    filter(p.value<0.05) |>
+    mutate(oddsratio = exp(estimate)) |>
+    select(term, oddsratio, p.value)
+)
+
+
 ```
 
-GENERAL COMMENTS AND USEFUL CODE ABOUT LOGISTIC
+#### Interpreting the coefficients of these models: 
 
-No support are 1s basically and support are 0s.
-
-From documentation: "the first level denotes failure and all others
-success".
+To interpret the coefficients as odds ratios, anything above 1 indicates they are more likely to oppose the changes to civil documents for trans people. This is because no support are coded as 1s and support are coded as 0s.
 
 ```{r}
 levels(datalr$trans_docs)
+table(datalr$trans_docs)
 # Yes = failure = 0
 # No = success = 1
 ```
+
+The logistic regression shows that 26 statistically significant terms. This includes factors variables with multiple terms. Of our 29 scaled variables, the significant variables (at the 5% level) are:
+
+More likely to OPPPOSE the right to change civil documents for trans people, include:  
+- men (compared to wom)
+- younger people 
+- people who oppose legal rights to change gender docs (compared to those who do)
+- people who refused to answer whether they have trans friends (compared to those who do)
+- people who are more financially sound (have fewer bill issues)
+- people not satisfied with their life (compared to those who are 'very satisfied')
+- people who identified as roma or an ethnic minority
+- people who had a higher discrimination score
+
+More likely to SUPPORT the the right
+- older people 
+- women
+- people who were self-employed (compared to all other occupation types incl students)
+- unmarried (single) people
+- non-believers (religious)
+- people with a landline and mobile
+- people who use the internet everyday/almost everyday (compared to all other internet use categories)
+- people who reported being more left wing (compared to right wing)
+- people who had friends in minority groups.
+
+##### Interpreting log-odds of scaled data
+
+_NUMERIC VARIABLES_
+*Without scaling*, we interpret logistic regression output as: 
+
+`coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
+
+`exp(coef(simple_logistic))`: the exponential of the slope coefficient (exp(B)) tells us the change of the odds if the independent variable increases by one unit
+
+*If the data is scaled:*
+
+A coefficient B (from a logistic regression) now reflects the change in the log-odds for a one standard deviation increase in the predictor variable, rather than a one-unit increase in the original scale.
+
+The odds ratio (exp(B)) now tells you how the odds change with a one standard deviation increase in the predictor variable, rather than a one-unit increase.
+
+Here we compare the pre and post transformation of coefficients for interpretation: 
 
 ```{r}
 # all the coefficients
@@ -1988,15 +2037,54 @@ head(coef(simple_logistic))
 head(exp(coef(simple_logistic)))
 ```
 
-`coef(simple_logistic)`: these coefficients represent the change in the log-odds for a one-unit increase in the corresponding independent variable
+_FACTOR VARIABLES_
 
-`exp(coef(simple_logistic))`: the exponential of the slope coefficient (exp(B)) tells us the change of the odds if the independent variable increases by one unit
+Factor variables when exponentialised give the likelihood to respond no/yes relative to the base group in the factor variable. We use the function `factors` to view the levels and identify the base group. For example, if the  to log-odds of A large town, (exp(CommunityLarge town)) = 1.04 and iis 
 
-If the data is scaled:
 
-A coefficient B (from a logistic regression) now reflects the change in the log-odds for a one standard deviation increase in the predictor variable, rather than a one-unit increase in the original scale.
+To assist with interpretation of factor outputs: 
 
-The odds ratio (exp(B)) now tells you how the odds change with a one standard deviation increase in the predictor variable, rather than a one-unit increase.
+Here is a function to identify all the base levels in each factor group. Useful to refer to during analysis of different logistic models. 
+
+```{r}
+
+extract_base_groups <- function(df) {
+
+  # extract factor vars only and list to print values
+  factor_vars <- names(final_data)[sapply(final_data, is.factor)]
+  base_groups <- list()
+  
+  # loop through values to check all levels
+  for (var in factor_vars) {
+    if (length(levels(df[[var]])) > 0) { # Check step - should be TRUE for all selected. 
+      contrast_matrix <- contrasts(df[[var]])
+      if (is.null(contrast_matrix)) {
+        base_groups[[var]] <- levels(df[[var]])[1] # check only - shouldn't ever run
+      } else {
+        base_group_level <- levels(df[[var]])[rowSums(abs(contrast_matrix)) == 0] # base group is the one with all zeroes, so we extract that
+        base_groups[[var]] <- base_group_level
+      }
+    } else {
+      base_groups[[var]] <- NA # Indicate non-factor or factor with no levels.
+    }
+  }
+  return(base_groups)
+}
+
+# run function with 'final data' and print a tidy output
+factor_bases <- extract_base_groups(final_data)
+
+factor_bases <- as_tibble(factor_bases) |> 
+  pivot_longer(cols = everything(), 
+               names_to = "vars",
+               values_to = "base_group")
+
+factor_bases
+```
+
+##### Model performance - Simple logistic
+
+Here, we test the models ability to classify people as supporting or not supporting the rights. 
 
 ```{r}
 # AIC of model
@@ -2005,33 +2093,39 @@ simple_logistic$aic
 #predicted probabilities of being a 1 (i.e. a refusal of possibility of trans doc)
 predicted_probs <- simple_logistic$fitted.values
 # same by running
-predicted_probs <- predict(simple_logistic, type = "response")
+# predicted_probs <- predict(simple_logistic, type = "response")
 head(predicted_probs)
 
-# Turning them to classes using custum threshold
+# Turning them to classes using custom threshold
 predicted_classes <- ifelse(predicted_probs > 0.5, "No", "Yes")
 head(predicted_classes)
 ```
 
+Get the confusion matrix:
+
 ```{r}
 confusionMatrix(as.factor(datalr$trans_docs), as.factor(predicted_classes))
+
 ```
+
+The simple model predicted people's response with 82% accuracy. That is quite decent for a basic first model. This shows the response is quite explainable with the data we have. The model is slightly better at predicting those who do not support than those who do. Seen by higher specificity than sensitivity (85% vs 77%). But they are both comparable which is good and confirms we don't have great class imbalance. 
+
 
 ```{r}
 roc_obj <- roc(datalr$trans_docs, predicted_probs)
 
-# Terrible graphs, do we have better ones?
+# Terrible graphs, do we have better ones? Not sure. I think the first is good enough. 
 pROC::ggroc(roc_obj)
 plot(roc_obj)
 
 coords(roc_obj, "best")
-
 auc(datalr$trans_docs, predicted_probs)
+
 ```
 
 ## Stepwise regression
 
-Chooses the best model based on the lowest AIC achievable
+Chooses the best simple logistic model based on the lowest AIC achievable
 
 ```{r}
 set.seed(123)
@@ -2039,11 +2133,25 @@ stepAIC <- step(simple_logistic, direction = "both", trace=0)
 stepAIC
 ```
 
-## Lasso regularization
+The stepwise regression has 19 of the 29 variables included in it's best model. It is quite consistent with what our significant variables were above, so we will not provide further commentary.  Compared to the full model, this reduced model does not provide a statistically significant improvement in fit. But it does give us a more simple model and shows us what individual level variable may be most important overall. 
 
 ```{r}
+anova(simple_logistic, stepAIC)
+```
+
+## Lasso regularization
+
+We still have too many variables for a mixed model. So here we will use Lasso to keep only our most important variables for the mixed models. 
+
+Without this step, the glmer stage is too computationally expensive. 
+
+```{r}
+# extract the significant variables from the stepAIC model
+
+vars <- all.vars(formula(stepAIC))
 # Convert data into a matrix for glmnet
-x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
+#x_lasso <- as.matrix(datalr[, -which(names(datalr) == "trans_docs")]) 
+x_lasso <- as.matrix(datalr[, vars[vars != "trans_docs"]]) 
 y_lasso <- as.matrix(datalr$trans_docs)
 
 # Fit the Lasso model (alpha = 1 for Lasso regularization)
@@ -2051,13 +2159,35 @@ lasso_model <- cv.glmnet(x_lasso, y_lasso, family = "binomial", alpha = 1)
 
 # Get all the coefficients
 coefficients <- coef(lasso_model, s = "lambda.min")
-
+coefficients
 # Filter for the non-zero ones
 non_zero_features <- rownames(coefficients)[which(coefficients != 0)]
 non_zero_features
 ```
 
-It might not be the best with factors, but it could be useful with numeric
+Here we have the reduced model with lasso. It gives us 8 variables now. We will inc
+
+Brad --> This is a really useful step because the glmer runs so long. But I'm struggling to interpert because the significant variables aren't that intuitive and don't agree as much with the logistic. E.g. variables like gender, 
+
+
+#### Final variable selection
+
+From these hints above and general intuition, we will select the following variables as our individual level fixed effects in the mixed level model: 
+
+- age
+- gender
+- religion (to be recoded as non-believer dummy since that's the significant variable)
+- bill_issues
+- internet use (recoded to everyday or not)
+- left_right
+- ethnic minority + roma minority (recoded to one dummy)
+- trans_friends
+- lgbti_docs
+- minority_discri 
+
+And these are our pre-defined fixed 
+
+
 
 ## Mixed model
 
@@ -2089,16 +2219,98 @@ Cross-level interactions are particularly useful in multilevel research because 
 
 For example, in educational research: 1) Individual level: student characteristics (study time, prior knowledge). 2) Group level: school or classroom characteristics (class size, teaching method). 3) Cross-level interaction: Does the effect of study time on performance depend on class size?
 
+### Running the glmer models
+
+To model, we will follow: Approach to multilevel model building based on Hox (2010)
+
+1/ Null Model (Random Intercept only) 2/ Add independent Level 1
+variables 3/ Add independent Level 2 variables 4/ Add random slopes 5/
+(Cross-level) interactions
+
+Each step, check whether your model is significantly improved compared
+to the previous one.
+
+We could run these different models and select the best one: 
+null_glmer -> only country random effects for a baseline
+glmer_stepwise -> using the best stepwise model best model for individual fixed effects + adding country random effects
+glmer_lasso -> using the lasso model fixed individual level effects + country
+glmer_level2 -> using the best model from above and adding in all country level fixed effects too
+glmer_cross_level -> the model using integrated 
+
 ```{r}
 # Switching to df containing both individual and country level
 complete_df <- complete_df |> 
-  drop_na() # should only be in our target
+  drop_na() # should be zero as we cleaned before but just in case 
 
 # Scaling the variables speeds up the running time. However we loose interpretation? maybe the best thing to do is to center them rather than scaling?
 scaled_df <- complete_df |>
   mutate(across(where(is.numeric), scale))
 
+# include glmer null model for comparison for improvements - only has random intercept
+null_glmer_model <- glmer(trans_docs ~ (1|country),
+                          data = scaled_df, 
+                          family=binomial(link="logit"))
+
+
+## running the level 1 glmer model (indiviudal fixed effects + country random effects)
+    # variable selection from the stepwise model output
+# this took 7.6 minutes to run WITH the scaled data, saved output locally
+      # start <- Sys.time()
+      # glmer_model_level1 <- glmer(
+      #   # target
+      #   trans_docs ~
+      #     #individual data - significant from stepwise testing
+      #     age + gender + marital_status + occupation + 
+      #     religion + phone_access + bill_issues + internet_use + life_sat + 
+      #     left_right + ethnic_minority + roma_minority + suffered_discr + 
+      #     gender_docs + friends_trans + n_friends_minorities + n_actions_against_discri + 
+      #     antilgbtq_rights + minority_discri + (1|country),
+      #   data = scaled_df,
+      #   family = binomial(link="logit")
+      #     ) 
+      # end <- Sys.time()
+      # end-start
+
+      # glmer_model_level1
+      # output_glmer_1 <- broom.mixed::tidy(glmer_model_level1)
+
+## running the level 2 glmer model (individual & country fixed effects + country random effects)
+
+# took 10.8 minutes to run so commented out. Saved output locally 
+      # start <- Sys.time()
+      # glmer_model_level2 <- glmer(
+      #   # target variable
+      #   trans_docs ~
+      #     #individual level fixed effects
+      #     age + gender + marital_status + occupation +
+      #     religion + phone_access + bill_issues + internet_use + life_sat +
+      #     left_right + ethnic_minority + roma_minority + suffered_discr +
+      #     gender_docs + friends_trans + n_friends_minorities + n_actions_against_discri +
+      #     antilgbtq_rights + minority_discri + 
+      #     #country level fixed effects
+      #     gdp_pc_ppp + gender_inequality_index + lgbt_policy_index + democracy_index +
+      #     # random effects of country
+      #     (1|country),
+      #   data = scaled_df,
+      #   family = binomial(link="logit")
+      #           )
+      # end <- Sys.time()
+      # end-start
+      # output_glmer_2 <- broom.mixed::tidy(glmer_model_level2)
+
+
+# glmer model with cross-level interactions
 glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequality_index + religion*gdp_pc_ppp + (1 | country), data=scaled_df, family=binomial(link="logit"))
+
+
+
+## saving the level1 and level2 outputs to file for review of full model effects
+    #write_csv2(output_glmer_1, "glmer_level1_model_output.csv")
+    #write_csv2(output_glmer_2, "glmer_level2_model_output.csv") 
+## writing output for AIC/BIC and saving too    
+    # glmer_compare <- anova(null_glmer_model, glmer_model_level1, glmer_model_level2, glmer_model)
+    # write_csv2(glmer_compare, "glmer_compare_basicmodels.csv") 
+
 
 #variable1*variable2 includes both the two variables separetely and their interaction
 #variable1:variable2 includes only the interaction
@@ -2106,11 +2318,22 @@ glmer_model <- glmer(trans_docs ~ gender:lgbt_policy_index + gender*gender_inequ
 
 summary(glmer_model) # print in better tables as Marga likes
 
-# Need to calculate intra class coefficient (proportion of variation explained by the grouping level)
+# To calculate the intraclass coefficient (ICC) for the model, we use the ICC function from performance. 
 
+# Calculate ICC for the null model, we get around 22% explained 
+performance::icc(null_glmer_model)
+
+# When we run for the model with scaled data, we get 7% ICC 
+performance::icc(glmer_model)
+
+
+# this gives us the following significant variables: age, gender, occupation, religion, phone_access, bill_issues, internet_use, left_right, ethnic_minority_ 
+
+# we exclude these non significant variable: martial_status,  
 ```
 
 The idea is to run interactions between individual level variables and country level variables choosing pair which make sense (ex. does the effect of being female on support for trans docs depend on the gender equality index? --> did this by doing gender*gender_inequality_index)
+
 
 Let's use our brain and common sense to choose the best combinations
 
@@ -2122,6 +2345,11 @@ minority x by country)
 
 Run random forest/gradient boosting/logistic regression with
 leave-one-out cross validation
+
+Leave-One-Out Cross-Validation (LOOCV):
+LOOCV is a special case of k-fold cross-validation, where k = the number of observations (n). 
+
+That means: For each observation (1 out of 28), the model is trained on the remaining 27 rows and tested on the left-out row. This process repeats 28 times (once per row). The final performance metric (e.g., accuracy, RMSE) is the average of all 28 test results.
 
 ## Aggregating individual data to country level
 
@@ -2135,66 +2363,67 @@ In the next steps we will synthesize the information from the individual
 respondents into country-level variables.
 
 Using means for numeric variables:
-```{r}
-names(select(final_data, where(is.numeric)))
 
-data_num <- final_data |> 
+```{r}
+names(select(complete_df, where(is.numeric)))
+
+data_num <- complete_df |> 
   group_by(country) |> 
   summarise(across(where(is.numeric), ~mean(.), .names = "mean_{.col}"))
 ```
 
 As well as for dummies:
+
 ```{r}
 # searching for factor variables with two levels
-dummy_names <- names(final_data)[sapply(final_data, is.factor) & sapply(final_data, function(x) length(levels(x)) == 2)]
+
+dummy_names <- names(complete_df)[sapply(complete_df, is.factor) & sapply(complete_df, function(x) length(levels(x)) == 2)]
 dummy_names
 
-dummy_levels <- lapply(final_data[dummy_names], levels)
+dummy_levels <- lapply(complete_df[dummy_names], levels)
 dummy_levels
 
-colSums(is.na(final_data[dummy_names]))
+colSums(is.na(complete_df[dummy_names]))
+
 ```
 
-After imputations only the target variable should have NAs. 
+After imputations only the target variable should have NAs. They have already been dropped before so no variable has NAs
 
 ```{r}
-data_dummy <- final_data %>%
+data_dummy <- complete_df %>%
   select(country, all_of(dummy_names)) %>%
   mutate(across(all_of(dummy_names),
                 ~ case_when(
                   . %in% c("0", "1") ~ as.numeric(as.character(.)),  # convert "0"/"1" to 0/1
                   . %in% c("Yes", "No") ~ recode(., "Yes" = 1, "No" = 0),  # convert "Yes"/"No" to 1/0
                   . %in% c("Man", "Woman") ~ recode(., "Man" = 1, "Woman" = 0),  # convert "Man"/"Woman" to 1/0
-                  TRUE ~ NA_real_  # assign NA to other unexpected values
+                  TRUE ~ NA  # assign NA to other unexpected values
                 ),
                 .names = "{.col}_num"))
 
-colSums(is.na(data_dummy))
+colSums(is.na(data_dummy)) # The warning is weird as there seem to be no NAs
+
 ```
 
 I converted factors with 2 levels to numerical 0-1 so we can compute their means.
-I am creating a column with the proportion of missing answers per country, but if 
-we don't need it at this stage we can just remove that line. NOTE THAT the mean of
-trans_docs is not considering NAs, just Yes and No answers.
+
+Deleted the column calculating the % of NAs in trans_doc because although useful those NAs had already been dropped so it was returning all 0s
 
 ```{r}
 # country means
 data_dummy <- data_dummy %>%
   group_by(country) %>%
-  mutate(trans_docs_na = sum(is.na(trans_docs_num)) / n()) %>% # calculating proportion of NAs
   summarise(
     across(ends_with("_num"), ~ mean(.x, na.rm = TRUE)),
-    trans_docs_na = first(trans_docs_na),
     .groups = "drop"
   )
-
-
-summary(data_dummy$trans_docs_na)
 
 
 # substitute the "_num" suffix with a "mean_" prefix so it has the same format as the variables in data_num
 data_dummy <- data_dummy %>%
   rename_with(~ paste0("mean_", str_remove(., "_num$")), ends_with("_num"))
+
+colSums(is.na(data_dummy))
 ```
 
 Now we can join the two datasets.
@@ -2207,22 +2436,22 @@ data_aggr <- data_num %>%
 The next variables are factor with >2 levels:
 
 ```{r}
-factor_names <- names(final_data)[!sapply(final_data, is.numeric) &
-              !(sapply(final_data, is.factor) & sapply(final_data, function(x) length(levels(x)) == 2))]
+
+factor_names <- names(complete_df)[!sapply(complete_df, is.numeric) &
+              !(sapply(complete_df, is.factor) & sapply(complete_df, function(x) length(levels(x)) == 2))]
 factor_names
 
 # checking the levels
-lapply(final_data[factor_names], levels)
+lapply(complete_df[factor_names], levels)
 
 # removing country from the list
 factor_names <- setdiff(factor_names, "country")
 
 # creating the aggregated dataset for factor variables
-data_factors <- final_data %>%
+
+data_factors <- complete_df %>%
   select(country, all_of(factor_names)) %>%
-  drop_na() %>% # DROPPING NAs TO "SIMULATE" IMPUTATION
   pivot_longer(cols = -country, names_to = "variable", values_to = "level") %>%
-  drop_na(level) %>% # Drop rows where the 'level' column is NA
   group_by(country, variable, level) %>%
   summarise(count = n(), .groups = "drop") %>%
   group_by(country, variable) %>%
@@ -2231,29 +2460,42 @@ data_factors <- final_data %>%
   pivot_wider(names_from = c(variable, level), values_from = proportion, names_glue = "{variable}_{level}")
 
 colSums(is.na(data_factors))
-
 ```
 
-I didn't figure out where the NAs come from, I have to rethink this.
+We are seeing NAs because in not all countries are all the factors' levels represented. For example we see that 
+social_class_The higher class of society has 3 missing values. Let's confirm that there are 3 countries in our 
+dataframe with no observation for that level
 
-But for now I guess we can join:
+```{r}
+complete_df |> filter(social_class=="The higher class of society") |>  pull(country) |> unique() |> length()
+```
+
+Therefore those proprtions should be 0s and not NAs
+
+```{r}
+data_factors <- data_factors |>
+  mutate(across(everything(), ~replace_na(., 0)))
+```
+
+
+Joining all together
+
+
 ```{r}
 data_aggr <- data_aggr |> 
   left_join(data_factors, by = "country")
 ```
 
-Lastly, we join the country-level variables obtained from external sources.
 
-```{r}
-data_aggr <- data_aggr %>%
-  left_join(country_level_data, by = c("country" = "iso2c")) %>%
-  select(-iso3c, -country.y) # drop unnecessary country identifiers
+colSums(is.na(data_aggr))
 
 dim(data_aggr)
 ```
 
+
 The resulting data frame has 28 observations and 80 variables. We might have to
 clean the names of the variables that were glued from variable_level.
+
 
 
 ## Linear regression with LASSO
@@ -2358,7 +2600,60 @@ print(country_predictions)
 
 ## Random forest
 
+```{r}
+data_aggr <- data_aggr |> 
+  select(-country)
+
+# Define LOOCV control
+control <- trainControl(
+  method = "LOOCV",
+  verboseIter = TRUE,  # Print progress
+  returnResamp = "all" # Save all resampling results
+)
+
+# Define hyperparameter grid for Random Forest
+rf_grid <- expand.grid(
+  mtry = seq(2, ncol(data_aggr) - 1, by = 2)
+)
+# mtry the number of variables randomly sampled at each split
+
+# Train Random Forest model with hyperparameter tuning
+rf_model <- train(
+  mean_trans_docs ~ ., 
+  data = data_aggr, 
+  method = "rf",
+  preProc=c('scale','center'),
+  trControl = control,
+  tuneGrid = rf_grid,
+  importance = TRUE   # Calculate variable importance
+)
+
+# View results
+print(rf_model)
+plot(rf_model)  # Plot performance across hyperparameters
+varImpPlot(rf_model$finalModel)  # Plot variable importance
+```
+
+
 ## Gradient boosting
+
+```{r}
+gbm_grid <- expand.grid(
+  n.trees = c(50, 100, 200),           # Fewer trees
+  interaction.depth = c(1, 2, 3),      # Much smaller tree depth
+  shrinkage = c(0.01, 0.05, 0.1),      # Keep these values
+  n.minobsinnode = c(1, 3, 5)          # Smaller minimum observations
+)
+
+gbm_model <- train(
+  mean_trans_docs ~ ., 
+  data = data_aggr, 
+  method = "gbm",
+  preProc = c('scale', 'center'),
+  trControl = control,
+  tuneGrid = gbm_grid)
+```
+
 
 # Brad's theory notes
 
