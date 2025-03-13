@@ -1299,15 +1299,6 @@ Some heavy correlations which is a little worrying, but as we are going to use
 these data to build cross-level interactions, this should not compromise the 
 reliability of our analysis too much.
 
-Lastly, we can drop the trans_support variable from the table country_level_data,
-so it is not duplicated when we join aggregated individual survey data to it.
-
-```{r}
-country_level_data <- country_level_data |> 
-  select(-trans_support)
-  
-```
-
 
 ## Paradata
 
@@ -2365,9 +2356,9 @@ respondents into country-level variables.
 Using means for numeric variables:
 
 ```{r}
-names(select(complete_df, where(is.numeric)))
+names(select(final_data, where(is.numeric))) # using final_data because it still has "country", which we dropped for complete_df
 
-data_num <- complete_df |> 
+data_num <- final_data |> 
   group_by(country) |> 
   summarise(across(where(is.numeric), ~mean(.), .names = "mean_{.col}"))
 ```
@@ -2377,20 +2368,20 @@ As well as for dummies:
 ```{r}
 # searching for factor variables with two levels
 
-dummy_names <- names(complete_df)[sapply(complete_df, is.factor) & sapply(complete_df, function(x) length(levels(x)) == 2)]
+dummy_names <- names(final_data)[sapply(final_data, is.factor) & sapply(final_data, function(x) length(levels(x)) == 2)]
 dummy_names
 
-dummy_levels <- lapply(complete_df[dummy_names], levels)
+dummy_levels <- lapply(final_data[dummy_names], levels)
 dummy_levels
 
-colSums(is.na(complete_df[dummy_names]))
+colSums(is.na(final_data[dummy_names]))
 
 ```
 
 After imputations only the target variable should have NAs. They have already been dropped before so no variable has NAs
 
 ```{r}
-data_dummy <- complete_df %>%
+data_dummy <- final_data %>%
   select(country, all_of(dummy_names)) %>%
   mutate(across(all_of(dummy_names),
                 ~ case_when(
@@ -2437,19 +2428,19 @@ The next variables are factor with >2 levels:
 
 ```{r}
 
-factor_names <- names(complete_df)[!sapply(complete_df, is.numeric) &
-              !(sapply(complete_df, is.factor) & sapply(complete_df, function(x) length(levels(x)) == 2))]
+factor_names <- names(final_data)[!sapply(final_data, is.numeric) &
+              !(sapply(final_data, is.factor) & sapply(final_data, function(x) length(levels(x)) == 2))]
 factor_names
 
 # checking the levels
-lapply(complete_df[factor_names], levels)
+lapply(final_data[factor_names], levels)
 
 # removing country from the list
 factor_names <- setdiff(factor_names, "country")
 
 # creating the aggregated dataset for factor variables
 
-data_factors <- complete_df %>%
+data_factors <- final_data %>%
   select(country, all_of(factor_names)) %>%
   pivot_longer(cols = -country, names_to = "variable", values_to = "level") %>%
   group_by(country, variable, level) %>%
@@ -2467,24 +2458,31 @@ social_class_The higher class of society has 3 missing values. Let's confirm tha
 dataframe with no observation for that level
 
 ```{r}
-complete_df |> filter(social_class=="The higher class of society") |>  pull(country) |> unique() |> length()
+final_data |> filter(social_class=="The higher class of society") |>  pull(country) |> unique() |> length()
 ```
 
-Therefore those proprtions should be 0s and not NAs
+Therefore those proportions should be 0s and not NAs
 
 ```{r}
 data_factors <- data_factors |>
   mutate(across(everything(), ~replace_na(., 0)))
 ```
 
-
 Joining all together
-
 
 ```{r}
 data_aggr <- data_aggr |> 
   left_join(data_factors, by = "country")
 ```
+
+Lastly, joining the country level variables obtained from external sources
+
+```{r}
+data_aggr <- data_aggr |> 
+  left_join(country_level_data, by = c("country" = "iso2c")) |> 
+  select(-c(iso3c, country.y))
+```
+
 
 ```{r}
 colSums(is.na(data_aggr))
@@ -2493,7 +2491,7 @@ dim(data_aggr)
 ```
 
 
-The resulting data frame has 28 observations and 80 variables. We might have to
+The resulting data frame has 28 observations and 79 variables. We might have to
 clean the names of the variables that were glued from variable_level.
 
 
@@ -2501,23 +2499,8 @@ clean the names of the variables that were glued from variable_level.
 ## Linear regression with LASSO
 
 ```{r}
-# Impute missing values using median imputation
-pre_proc <- preProcess(data_aggr, method = "medianImpute")
-
-# Apply the preprocessing
-data_imputed <- predict(pre_proc, data_aggr)
-
-# 2. Scale the data (excluding the target and country variable)
-# Select predictors, remove country and target variable
-dataggr_scaled <- data_imputed %>%
-  select(-country, -mean_trans_docs) %>%
-  scale()
-
-# Convert to matrix for glmnet
-features_scaled <- as.matrix(dataggr_scaled)
-
-# Extract the target variable
-target <- data_aggr$mean_trans_docs
+data_lasso <- data_aggr |> 
+  select(-country)
 
 # Define the leave-one-out cross-validation control
 ctrl <- trainControl(
@@ -2530,14 +2513,16 @@ lambda_grid <- 10^seq(-3, 3, length = 100)
 
 # Train the Lasso model with LOOCV
 lasso_model <- train(
-  x = features_scaled,
-  y = target,
+  mean_trans_docs ~ ., 
+  data = data_lasso, 
   method = "glmnet",
+  preProc=c('scale','center'),
   trControl = ctrl,
   tuneGrid = expand.grid(
     alpha = 1,  # 1 for Lasso
     lambda = lambda_grid
   ),
+  importance = TRUE,
   metric = "RMSE"
 )
 
@@ -2553,24 +2538,28 @@ print(importance)
 plot(importance, top = 20)
 
 # Get the coefficients of the best model
-best_lambda <- lasso_model$bestTune$lambda
-final_model <- glmnet(features_scaled, target, alpha = 1, lambda = best_lambda)
-coef_lasso <- coef(final_model)
+best_model <- lasso_model$finalModel
+coef_lasso <- coef(best_model, s = best_lambda)
 print(coef_lasso)
 
 # Calculate predictions and residuals
-predictions <- predict(lasso_model, features_scaled)
-residuals <- target - predictions
+predictions <- predict(lasso_model, data_lasso)
+# Extract the actual values
+actual <- data_lasso$mean_trans_docs
+# Calculate residuals
+residuals <- actual - predictions
+
 
 # Calculate R-squared and RMSE
-r_squared <- 1 - sum(residuals^2) / sum((target - mean(target))^2)
+r_squared <- 1 - sum(residuals^2) / sum((actual - mean(actual))^2)
 rmse <- sqrt(mean(residuals^2))
+
 
 cat("R-squared:", r_squared, "\n")
 cat("RMSE:", rmse, "\n")
 
 # Plot actual vs predicted values
-plot(target, predictions, 
+plot(actual, predictions, 
      main = "Actual vs Predicted Values",
      xlab = "Actual", ylab = "Predicted",
      pch = 16, col = "blue")
@@ -2583,10 +2572,9 @@ plot(predictions, residuals,
      pch = 16, col = "blue")
 abline(h = 0, col = "red")
 
-# Optional: if you want to see country-level predictions
 # Combine country names with predictions
 country_predictions <- data.frame(
-  country = data_imputed$country,
+  country = data_aggr$country,
   actual = target,
   predicted = predictions
 )
@@ -2601,6 +2589,7 @@ print(country_predictions)
 ## Random forest
 
 ```{r}
+
 data_aggr <- data_aggr |> 
   select(-country)
 
