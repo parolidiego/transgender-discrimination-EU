@@ -2621,11 +2621,11 @@ non_believer × gender_inequality_index (negative)
 
 These effects are interpreted as the relationships between an individual-level variable and the outcome variable changes depending on the value of a country-level variable.
 
-For the right wing x lgbti policy variable, as the coefficient is negative, we infer that the effect of being right wing is weaker in countries with higher lgbti policies. So more mild right wing opposition to transgender documenation occurs in more progressive countries. This makes sense and maybe helps capture some of the political variance between countries. 
+For the right wing x lgbti policy variable, as the coefficient is negative, we infer that the effect of being right wing is weaker in countries with higher lgbti policies. So more mild right wing opposition to transgender documentation occurs in more progressive countries (those with stronger lgbti views). This makes sense and maybe helps capture some of the political opinion subjectivity between individuals in differenet countries. 
 
-For the women x lgbti policy variable, suggests that the effect of being a since it's positive, we conclude that the effect of being a women in countries with stronger lgbti policies is stronger. 
+For the women x lgbti policy variable, suggests that the effect of being a women in countries with stronger lgbti policies is stronger. This is more difficult to interpret.
 
-For non-believer x democracy index and gender inequality index, being negative, this implies that the effect of being a non-believer is weaker in countries with with higher democracy score and also more gender inequality (as this is a negative scale, greater equality comes with lower scores). This could align with more progressive democratic countries having lower levels of religion and higher support for the target variable. 
+For non-believer x democracy index and non-believer x gender inequality index, both are negative. This implies that the effect of being a non-believer is weaker in countries with with higher democracy score and also a higher gender inequality score (as this is a negative scale, the negative relationship indicatesa a positive correlation). This could align with more progressive democratic countries having lower levels of religion, more gender equality policies and higher support for our target variable.
 
 ### Interpreting results
 
@@ -2660,34 +2660,53 @@ summary_table <- prediction_summary %>%
   select(trans_docs, country, null_model_pred, m1_model_pred, m2_model_pred, m3_model_pred) |>
   group_by(country) %>%
   summarise(
-    actual_rate = mean(trans_docs),
-    null_rate = mean(null_model_pred),
-    m1_rate = mean(m1_model_pred),
-    m2_rate = mean(m2_model_pred),
-    m3_rate = mean(m3_model_pred))
+    actual_rate = mean(trans_docs)*100,
+    null_rate = mean(null_model_pred)*100,
+    m1_rate = mean(m1_model_pred)*100,
+    m2_rate = mean(m2_model_pred)*100,
+    m3_rate = mean(m3_model_pred)*100)
 
 #plot all of the model estimates on a graph
 # with unpivoted data
-summary_table |> 
-          ggplot(aes(x=reorder(country, -actual_rate), 
-                     y = actual_rate))+
-          geom_col()+
-          geom_point(aes(y = null_rate), 
-                     color = "blue", size = 3, shape = 18,
-                     position = position_nudge(x = -0.3)) +
-        geom_point(aes(y = m1_rate), 
-                   color = "red", size = 3, shape = 15, 
-                   position = position_nudge(x = -0.1)) +
-        geom_point(aes(y = m2_rate), 
-                   color = "green", size = 3, shape = 16, 
-                   position = position_nudge(x = 0.1)) +
-        geom_point(aes(y = m3_rate), 
-                   color = "purple", size = 3, shape = 17,
-                   position = position_nudge(x = 0.3)) +
-          theme(axis.text.x = element_text(angle = 45, hjust = 1),
-                            axis.title.x = element_blank()) +
-          scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
-          labs(y = "Proportion of support, by mixed model type")
+summary_table %>%
+  mutate(
+    null_model = "Null Model",
+    model_1 = "Model 1 (+individual fixed)",
+    model_2 = "Model 2 (+country fixed)",
+    model_3 = "Model 3 (+cross-level effects)"
+  ) %>%
+  ggplot(aes(x = reorder(country, -actual_rate), y = actual_rate)) +
+  geom_col(alpha = 0.5) +
+  geom_point(aes(y = null_rate, color = null_model),
+             size = 3, shape = 18,
+             position = position_nudge(x = -0.3)) +
+  geom_point(aes(y = m1_rate, color = model_1),
+             size = 3, shape = 15,
+             position = position_nudge(x = -0.1)) +
+  geom_point(aes(y = m2_rate, color = model_2),
+             size = 3, shape = 16,
+             position = position_nudge(x = 0.1)) +
+  geom_point(aes(y = m3_rate, color = model_3),
+             size = 3, shape = 17,
+             position = position_nudge(x = 0.3)) +
+  scale_color_manual(name = "Mixed model Type",
+                       values = c("Null Model" = "blue",
+                                  "Model 1 (+individual fixed)" = "red",
+                                  "Model 2 (+country fixed)" = "green",
+                                  "Model 3 (+cross-level effects)" = "purple")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5),
+        axis.title.x = element_blank())+
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  labs(title = "Comparing explantory mixed models classification power",
+       y = "Proportion of support",
+       x = "Countries, ordered by actual support") +
+  theme_minimal()+
+  theme(panel.grid = element_blank(),
+        legend.position = c(0.98, 0.98),  # Adjust coordinates for top right
+        legend.justification = c("right", "top"),
+        legend.background = element_rect(fill = "white", color = "gray"))
+
+
 
 ```
 
