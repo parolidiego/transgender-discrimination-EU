@@ -1640,8 +1640,7 @@ dk_target |>
 
 If all NA responses to the target are removed, this is how much the
 "Yes" count increases for each of our countries. We see this is not
-proportional. This is a statistical phenomenon. distribution of the
-variable looks by country. The NA vote removal, makes our differences in
+proportional and the NA vote removal makes our differences in
 Yes/No differences appear larger.
 
 ```{r}
@@ -1783,14 +1782,12 @@ interpretation of countries as that is covered above):
 
 -   Anti-lgbti rights people were about 10% more likely to not respond
 
--   Internet use was significant but is not interpertable. If you had
-    not used the internet (higher NA likelihood) or used it 2-3 times a
-    week (lower NA likelihood) compared to everyday use
+-   Internet use was significant, those who had not used the internet or did
+    not have access, were less likely to respond compared to those who use 
+    the internet everyday. 
 
--   Social class was significant at all levels, compared to the working
-    class, you were more likely to not respond to our target variable if
-    you reported being in the lower middle, middle or upper middle
-    class. I.e. working class were less likely to answer this question.
+-   Social class was significant at all levels, this means the working
+    class were more likely to NA respond than all other class levels. 
 
 <br>
 
@@ -1837,12 +1834,21 @@ under <- ovun.sample(target_NA~.,
 
 table(under$target_NA)
 
-#run the rf model 
+#run a rf model to see how much of the NA values we can explain
 rfunder <- randomForest(target_NA~., data=under)
 rfunder
+
+# check a simple logistic model oucomes for undersampled data
+broom::tidy(glm(target_NA ~., 
+                data = under, 
+                family="binomial")) |> 
+  filter(p.value<0.05) |> 
+  mutate(oddsratio = exp(estimate)) |> 
+  select(term, oddsratio, p.value)
+
 ```
 
-We see that only around 5% of the variance is explained.
+We see that only around 5% of the variance is explained through RF. However The undersampled data with a simplified dataframe finds that higher DK were associated with being anti lgbti rights, less frequent internet use and being working class. This is all useful to compare to overall response rates. 
 
 ### Testing the NA values against paradata
 
@@ -1910,16 +1916,14 @@ more likely to respond. This increases with lacking cooperation. If
 cooperation was fair, there was around 40% more chance of NA, if
 cooperation was average, around 75% higher chance of NA. If cooperation
 was bad, there was about 350% higher chance of a NA response to our
-target variable.
+target variable. This variable also has risk of reverse causality, as higher 
+NA respose is likely a reason to be rated as low cooperation. 
 
-Overall, the correlations with our target variables are low which means
-we don't have a major concern. Some are interesting e.g. interview
-cooperation. The worse the cooperation, the more likely to not respond
-to the question. This could be underreporting No votes, because as we
-saw in the descriptive analysis, the worse the cooperation, the higher
-the No vote for supporting trans_docs. There could also be some reverse
-causality, as not responding leads to a worse cooperation score. But the
-odds ratios here are very high.
+Overall, this section found that people more likely to respond NA
+seems similar to those more likely to oppose trans rights to change papers. 
+So there is some risk of under reporting of true support if people opposed are not 
+responding. This is likely capturing some social desirability as people don't 
+want to appear discriminatory and hide their true views. 
 
 # Imputing missing data
 
@@ -2413,6 +2417,8 @@ Adjusted ICC: The proportion of total variance explained by the grouping structu
 
 Unadjusted ICC: The proportion of total variance explained by the grouping structure (random effects), excluding any variance explained by the fixed effects in the model
 
+#### Null mixed model - country level random effects only
+
 ```{r, message=FALSE}
 complete_df <- complete_df |> 
   drop_na() |> # we have NAs only in our target
@@ -2445,8 +2451,13 @@ auc(scaled_df$trans_docs, predicted_probs)
 # ICC
 performance::icc(glmer_step1)
 ```
+The AUC here measures the models ability to determine trans_docs by country by country only differences. The AUC of 0.7405 shows just using country, you have better than random prediction (which would be 0.5). 
 
-...
+The ICC represents the proportion of variance in trans_docs attributable to differences between countries. The value of 0.227 shows that country is a significant variable, but indiviudal level varibles must be included to make this a properly good explanatory model. 
+
+The AIC (28212) can be used for model performance later. If AIC reduces, the other models are improvments. 
+
+#### Mixed model 1 - adding in individual-level fixed effects 
 
 ```{r, message=FALSE}
 # Random intercept + individual fixed effects
@@ -2475,10 +2486,16 @@ performance::icc(glmer_step2)
 anova(glmer_step1, glmer_step2)
 ```
 
-...
+After adding in the indiviudal level fixed effects, we see:
+
+The model is improved. We have a significantly reduced AIC (23612) and also see improved AUC (up to around 0.84 to show classification power)
+
+The ICC has reduced, this indicates that the indiviudual level variables are now explaining some of the variance previously explained by the country level variable.
+
+#### Mixed model 2 - adding in country-level fixed effects 
 
 ```{r, message=FALSE}
-# Random intercept + individual and country fixed effects
+# Random intercept + individual fixed effects + country fixed effects
 glmer_step3 <- glmer(trans_docs ~ age + gender + social_class +
                        ethnic_minority + suffered_discr + 
                        friends_trans + antilgbtq_rights +
@@ -2504,7 +2521,32 @@ performance::icc(glmer_step3)
 anova(glmer_step1, glmer_step2, glmer_step3)
 ```
 
-...
+In this model, when including country level fixed effects too, we see:
+
+An overfitted model compared to step 2 (indiviudal fixed effects). A better model compared to step 1 (null).The model is overfitted because performance and predictive power do not improve comapred to step 2 but we have additional variables. The AUC is equivalent while the AIC has increased (indicating worse overall model fit). 
+
+#### Mixed model 3 - adding in cross-level interactions and random slopes 
+
+This final mixed model includes cross-level interactions between individual and country level data. The following interactions are included in our models:
+
+`right_wing:lgbt_policy_index`: Tests whether the effect of individual political ideology varies based on a country's LGBT policy environment. The relationship between conservative views and trans attitudes might be weaker in countries with strong LGBT protections.
+
+`social_class:gdp_pc_ppp`: Tests whether social class effects differ across countries with varying economic development.
+
+`gender:gender_inequality_index`: Tests how the relationship between being female and attitudes toward transgender people varies depending on the level of gender inequality in their country.
+
+`gender:lgbt_policy_index`: Tests how the relationship between an individual's gender and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
+
+`age:gdp_pc_ppp`: Tests how the relationship between an individual's age and their attitudes toward transgender people varies depending on the economic development level of their country.
+
+`non_believer:democracy_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the democratic context of their country.
+
+`non_believer:gender_inequality_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the level of gender inequality in their country
+
+`unhappy:lgbt_policy_index`: Tests how the relationship between an individual's unhappiness (or life dissatisfaction) and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
+ 
+`poor:democracy_index`: Tests how the relationship between an individual's economic status (being poor) and their attitudes toward transgender people varies depending on the democratic context of their country.
+
 
 ```{r, message=FALSE}
 # Adding random slopes and cross level interaction
@@ -2534,6 +2576,10 @@ glmer_step4 <- glmer(trans_docs ~
                        democracy_index |country),
                      data = scaled_df,
                      family = binomial(link="logit"))
+```
+
+Run the diagnostics: 
+```{r}
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step4))
 # Random intercepts coefficients
@@ -2561,27 +2607,74 @@ plot.roc(scaled_df$trans_docs, predicted_probs,
          print.thres="best")
 ```
 
-`right_wing:lgbt_policy_index`: Tests whether the effect of individual political ideology varies based on a country's LGBT policy environment. The relationship between conservative views and trans attitudes might be weaker in countries with strong LGBT protections.
+This model, although computationally expensive, is a marginal improvement on the previous best model (model 1, individual fixed effects). The model fit has improved.  We see that in this full model, the AIC dropped to 23606. However, the BIC increased from the model 1, so that does create some uncertainty. 
 
-`social_class:gdp_pc_ppp`: Tests whether social class effects differ across countries with varying economic development.
-
-`gender:gender_inequality_index`: Tests how the relationship between being female and attitudes toward transgender people varies depending on the level of gender inequality in their country.
-
-`gender:lgbt_policy_index`: Tests how the relationship between an individual's gender and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
-
-`age:gdp_pc_ppp`: Tests how the relationship between an individual's age and their attitudes toward transgender people varies depending on the economic development level of their country.
-
-`non_believer:democracy_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the democratic context of their country.
-
-`non_believer:gender_inequality_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the level of gender inequality in their country
-
-`unhappy:lgbt_policy_index`: Tests how the relationship between an individual's unhappiness (or life dissatisfaction) and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
- 
-`poor:democracy_index`: Tests how the relationship between an individual's economic status (being poor) and their attitudes toward transgender people varies depending on the democratic context of their country.
+The predictive power actual increases very very marginally. The AUC increases from 0.8389 to 0.8394 in the full model. This may indicate the predictive power is maximised around 84%, given such minor improvements for 
 
 ### Interpreting results
 
-...
+The best model is the full model with all of the indiviudal-level, country-level and cross-level effects included. However the gains are very marginal from the previous best model. So depending on needs, the model 1 may be the better option due to simplicity in interpretation and efficiency of computation. 
+
+These mixed models allow us to select the best level of model to use. The best model is model 1, with individual level fixed effects and a country level random slope. This is because it has good predictive power and does not overfit the model. The final model with cross-level effects is very computationally expensive and offers little improvement 
+
+Here we can show the distribution of our preferred model, with random slopes for country and fixed individual effects. 
+
+```{r}
+# summarise predictions
+prediction_summary <- scaled_df |> 
+  select(trans_docs, 
+         country) |> 
+  mutate(null_scaled = predict(glmer_step1),
+         null_model_pred = ifelse(null_scaled > 0.5, 1, 0),
+         m1_preds = predict(glmer_step2),
+         m1_model_pred = ifelse(m1_preds > 0.5, 1, 0),
+         m2_preds = predict(glmer_step3),
+         m2_model_pred = ifelse(m2_preds > 0.5, 1, 0),
+         m3_preds = predict(glmer_step4), 
+         m3_model_pred = ifelse(m3_preds > 0.5, 1, 0))
+
+# calculate rates for each model at country level and pivot longer
+summary_table <- prediction_summary %>%
+  select(trans_docs, country, null_model_pred, m1_model_pred, m2_model_pred, m3_model_pred) |>
+  group_by(country) %>%
+  summarise(
+    actual_rate = mean(trans_docs),
+    null_rate = mean(null_model_pred),
+    m1_rate = mean(m1_model_pred),
+    m2_rate = mean(m2_model_pred),
+    m3_rate = mean(m3_model_pred))
+
+#plot all of the model estimates on a graph
+# with unpivoted data
+summary_table |> 
+          ggplot(aes(x=reorder(country, -actual_rate), 
+                     y = actual_rate))+
+          geom_col()+
+          geom_point(aes(y = null_rate), 
+                     color = "blue", size = 3, shape = 18,
+                     position = position_nudge(x = -0.3)) +
+        geom_point(aes(y = m1_rate), 
+                   color = "red", size = 3, shape = 15, 
+                   position = position_nudge(x = -0.1)) +
+        geom_point(aes(y = m2_rate), 
+                   color = "green", size = 3, shape = 16, 
+                   position = position_nudge(x = 0.1)) +
+        geom_point(aes(y = m3_rate), 
+                   color = "purple", size = 3, shape = 17,
+                   position = position_nudge(x = 0.3)) +
+          theme(axis.text.x = element_text(angle = 45, hjust = 1),
+                            axis.title.x = element_blank()) +
+          scale_y_continuous(labels = scales::percent_format(scale = 1)) + 
+          labs(y = "Proportion of support, by mixed model type")
+
+```
+
+Secondary plot, show our mixed model estimates in relation to the actual value. which over/under estimated. 
+
+```{r}
+
+```
+
 
 # Predictive model
 
