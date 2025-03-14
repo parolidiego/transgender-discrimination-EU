@@ -47,6 +47,7 @@ library(mice)
 library(glmnet)
 library(fastDummies)
 library(rempsyc)
+library(gbm)
 ```
 
 # Loading data
@@ -2361,7 +2362,7 @@ scaled_df <- complete_df |>
                   democracy_index), ~scale(.x, center = TRUE, scale = TRUE)))
 ```
 
-```{r}
+```{r, message=FALSE}
 # Null model random intercept only
 glmer_step1 <- glmer(trans_docs ~ (1|country),
                           data = scaled_df, 
@@ -2381,7 +2382,7 @@ performance::icc(glmer_step1)
 
 ...
 
-```{r}
+```{r, message=FALSE}
 # Random intercept + individual fixed effects
 glmer_step2 <- glmer(trans_docs ~ age + gender + social_class +
                        ethnic_minority + suffered_discr + 
@@ -2410,7 +2411,7 @@ anova(glmer_step1, glmer_step2)
 
 ...
 
-```{r}
+```{r, message=FALSE}
 # Random intercept + individual and country fixed effects
 glmer_step3 <- glmer(trans_docs ~ age + gender + social_class +
                        ethnic_minority + suffered_discr + 
@@ -2439,7 +2440,7 @@ anova(glmer_step1, glmer_step2, glmer_step3)
 
 ...
 
-```{r}
+```{r, message=FALSE}
 # Adding random slopes and cross level interaction
 glmer_step4 <- glmer(trans_docs ~ 
                        # Individual level variables
@@ -2518,16 +2519,20 @@ plot.roc(scaled_df$trans_docs, predicted_probs,
 
 # Predictive model
 
-Summarize individual data to a country level (ex. percentage of population living in rural areas by country, percentage of people from minority x by country). Target variable will become % of people that support the right for transgender people to change their civil documents.
+Developing a Predictive Model for Other Countries
 
-Then run random forest/gradient boosting/elastic-net linear regression with leave-one-out cross validation.
+1) Summarize individual data to a country level (ex. percentage of population living in rural areas by country, percentage of people from minority x by country). Target variable will become % of people in country x that support the right for transgender people to change their civil documents.
+
+2) Then run random forest/gradient boosting/elastic-net linear regression with leave-one-out cross validation.
 
 Leave-One-Out Cross-Validation (LOOCV):
-LOOCV is a special case of k-fold cross-validation, where k = the number of observations (n). 
+LOOCV is a special case of k-fold cross-validation, where k = the number of observations (n). That means: For each observation (1 out of 28), the model is trained on the remaining 27 rows and tested on the left-out row. This process repeats 28 times (once per row). The final performance metric (e.g., accuracy, RMSE) is the average of all 28 test results.
 
-That means: For each observation (1 out of 28), the model is trained on the remaining 27 rows and tested on the left-out row. This process repeats 28 times (once per row). The final performance metric (e.g., accuracy, RMSE) is the average of all 28 test results.
+We switched to country level predictions because this is as we understood the task.
 
-We switched to country level predictions because this is as we inteded the task.
+Given that by switching to country level data we only have 28 observations it does not make sense to split our dataframe into test and training for model comparison. Instead we will exploit the fact of having so few rows to run leave-one-out cross validation for hyperparameter tuning and to compare our models.
+
+It is also worth noting that the generalizability of our model is very low. Partially because of the few observations, partially because it is trained only on data from European Union countries. These countries share many similarities. The models we derive could be used to predict support for `trans_docs` in other European countries, but these models' findings are likely to be extremely wrong for countries outside Europe, or with a socio-economic structure completely different than that of EU countries. 
 
 ## Aggregating individual data to country level
 
@@ -2672,13 +2677,12 @@ set.seed(123)
 # Define the leave-one-out cross-validation control
 ctrl <- trainControl(
   method = "LOOCV",
-  verboseIter = TRUE
 )
 
 # Defining Elastic net grid 
 elastic_grid <- expand.grid(
   alpha = seq(0, 1, length = 10),  # Search from Ridge (0) to Lasso (1)
-  lambda = 10^seq(-3, 3, length = 100)  # Regularization strength
+  lambda = 10^seq(-5, 1, length = 100)  # Regularization strength
 )
 
 # Train the Elastic Net model
@@ -2693,84 +2697,19 @@ elastic_net_model <- train(
 )
 
 # Display the best alpha and lambda values
-print(elastic_net_model$bestTune)
-
-# Plot the results to see the optimal alpha and lambda
-plot(elastic_net_model)
-
-# Make predictions on the dataset
-predictions <- predict(elastic_net_model, newdata = data_models)
-
-# Evaluate model performance
-mse <- mean((predictions - data_models$mean_trans_docs)^2)
-r_squared <- 1 - sum((predictions - data_models$mean_trans_docs)^2) / sum((data_models$mean_trans_docs - mean(data_models$mean_trans_docs))^2)
-
-# Print evaluation metrics
-print(paste("MSE:", mse))
-print(paste("R-squared:", r_squared))
-
-
+print(elastic_net_model)
+elastic_net_model$bestTune
 ```
-
-Commented bc I moved predictions to the last part.
-```{r}
-# # Calculate predictions and residuals
-# predictions <- predict(lasso_model, data_models)
-# # Extract the actual values
-# actual <- data_models$mean_trans_docs
-# # Calculate residuals
-# residuals <- actual - predictions
-# 
-# 
-# # Calculate R-squared and RMSE
-# r_squared <- 1 - sum(residuals^2) / sum((actual - mean(actual))^2)
-# rmse <- sqrt(mean(residuals^2))
-# 
-# 
-# cat("R-squared:", r_squared, "\n")
-# cat("RMSE:", rmse, "\n")
-# 
-# # Plot actual vs predicted values
-# plot(actual, predictions, 
-#      main = "Actual vs Predicted Values",
-#      xlab = "Actual", ylab = "Predicted",
-#      pch = 16, col = "blue")
-# abline(0, 1, col = "red")
-# 
-# # Plot residuals
-# plot(predictions, residuals,
-#      main = "Residuals vs Predicted Values",
-#      xlab = "Predicted Values", ylab = "Residuals",
-#      pch = 16, col = "blue")
-# abline(h = 0, col = "red")
-# 
-# # Combine country names with predictions
-# country_predictions <- data.frame(
-#   country = data_aggr$country,
-#   actual = target,
-#   predicted = predictions
-# )
-# 
-# # Sort by prediction (descending)
-# country_predictions <- country_predictions[order(country_predictions$predicted, decreasing = TRUE), ]
-# print(country_predictions)
-
-```
-
 
 ## Random forest
 
-```{r}
-# I CHANGED THE DATA USED TO DATA_MODELS SO I COULD KEEP THE COUNTRY COLUMN FOR PREDICTIONS
-
-# data_aggr <- data_aggr |> 
-#   select(-country)
+```{r, message=FALSE}
+set.seed(123)
 
 # Define LOOCV control
 control <- trainControl(
   method = "LOOCV",
-  verboseIter = TRUE,  # Print progress
-  returnResamp = "all" # Save all resampling results
+  returnResamp = "all"
 )
 
 # Define hyperparameter grid for Random Forest
@@ -2790,21 +2729,28 @@ rf_model <- train(
   importance = TRUE   # Calculate variable importance
 )
 
-# View results
+# Results
 print(rf_model)
-plot(rf_model)  # Plot performance across hyperparameters
-varImpPlot(rf_model$finalModel)  # Plot variable importance
+plot(rf_model)
+rf_model$bestTune
 ```
 
 
 ## Gradient boosting
 
-```{r}
+```{r, message=FALSE}
+set.seed(123)
+
+control <- trainControl(
+  method = "LOOCV",
+  returnResamp = "all"
+)
+
 gbm_grid <- expand.grid(
-  n.trees = c(50, 100, 200),           # Fewer trees
-  interaction.depth = c(1, 2, 3),      # Much smaller tree depth
-  shrinkage = c(0.01, 0.05, 0.1),      # Keep these values
-  n.minobsinnode = c(1, 3, 5)          # Smaller minimum observations
+  n.trees = c(50, 100, 200),           # Number of trees
+  interaction.depth = c(1, 2, 3),      # Tree depth
+  shrinkage = c(0.01, 0.05, 0.1),      # Shrinkage
+  n.minobsinnode = c(1, 3, 5)          # Minimum observations
 )
 
 gbm_model <- train(
@@ -2813,12 +2759,20 @@ gbm_model <- train(
   method = "gbm",
   preProc = c('scale', 'center'),
   trControl = control,
-  tuneGrid = gbm_grid)
+  tuneGrid = gbm_grid,
+  verbose = FALSE)
+
+print(gbm_model)
+gbm_model$bestTune
 ```
 
-### Comparing predictions
+## Comparing predictions
 
 ```{r}
+# Adding benchmark (mean)
+benchFit <- lm(mean_trans_docs ~ 1, data=data_models)
+
+benchmark_pred <- predict(benchFit, data_aggr)
 elastic_pred <- predict(elastic_net_model, data_aggr)
 rf_pred <- predict(rf_model, data_aggr)
 gbm_pred <- predict(gbm_model, data_aggr)
@@ -2830,12 +2784,14 @@ actual <- data_aggr$mean_trans_docs
 all_predictions <- data.frame(
   country = data_aggr$country,
   actual = actual,
+  benchmark = benchmark_pred,
   elastic_net = elastic_pred,
   random_forest = rf_pred,
   gradient_boosting = gbm_pred
 )
 
 # Calculate errors for each model
+all_predictions$benchmark_error <- abs(all_predictions$actual - all_predictions$benchmark)
 all_predictions$elastic_error <- abs(all_predictions$actual - all_predictions$elastic_net)
 all_predictions$rf_error <- abs(all_predictions$actual - all_predictions$random_forest)
 all_predictions$gbm_error <- abs(all_predictions$actual - all_predictions$gradient_boosting)
@@ -2851,12 +2807,14 @@ calculate_metrics <- function(actual, predicted) {
 }
 
 # Get metrics for each model
+benchmark_metrics <- calculate_metrics(actual, benchmark_pred)
 elastic_metrics <- calculate_metrics(actual, elastic_pred)
 rf_metrics <- calculate_metrics(actual, rf_pred)
 gbm_metrics <- calculate_metrics(actual, gbm_pred)
 
 # Combine metrics
 model_metrics <- rbind(
+  "Benchmark(=Mean)" = benchmark_metrics,
   Elastic_Net = elastic_metrics,
   Random_Forest = rf_metrics,
   Gradient_Boosting = gbm_metrics
@@ -2864,12 +2822,16 @@ model_metrics <- rbind(
 
 # Print performance comparison
 print(model_metrics)
+```
 
+We are able to predict so good partially because this is a set of observations which share many characteristics among them. Due to this low number of observations we are able to run LOOCV which yields amazing results. However, we should treat these results carefully, as the limited number of observation and such high performance metrics suggest that our models are prone to overfitting. Again this is mostly due to having few and similar observations, hence we are able to predict really well among those observations, but the generizability power of our model is quite low. We would need many more and many more diverse countries in our training dataset to build a model which could be applicable even outside Europe.
+
+```{r}
 # Sort predictions by actual values (descending)
 sorted_predictions <- all_predictions[order(all_predictions$actual, decreasing = TRUE), ]
 
 # Print sorted predictions
-print(sorted_predictions[, c("country", "actual", "elastic_net", "random_forest", "gradient_boosting")])
+print(sorted_predictions[, c("country", "actual", "benchmark", "elastic_net", "random_forest", "gradient_boosting")])
 
 # Visualize predictions across countries
 # Reshape the data for plotting
@@ -2905,7 +2867,8 @@ all_predictions$best_model <- apply(all_predictions[, c("elastic_error", "rf_err
 table(all_predictions$best_model)
 ```
 
-Checks for overfitting in GBM:
+### Checks for overfitting in GBM
+
 ```{r}
 # Calculate residuals
 gbm_residuals <- actual - gbm_pred
@@ -2920,225 +2883,58 @@ ggplot(residuals_df, aes(x = actual, y = gbm_residuals)) +
   theme_minimal() +
   labs(title = "Residuals Plot for Gradient Boosting",
        x = "Actual Values", y = "Residuals")
-
-
-
-library(gbm)
-gbm_importance <- varImp(gbm_model, scale = FALSE)
-
-# Plot importance
-ggplot(gbm_importance, aes(x = reorder(rownames(gbm_importance), Overall), y = Overall)) +
-  geom_col(fill = "blue") +
-  coord_flip() +
-  theme_minimal() +
-  labs(title = "Feature Importance - Gradient Boosting",
-       x = "Features", y = "Importance")
-
-gbm_importance
 ```
 
-# Brad's theory notes
+## Variables importance
 
-Leaving this section here, it is to be deleted as we incorporate what we
-need from here into the explanatory model part
-
-#### Running a different logistic model for each country
-
-We now have a table to test some glmer modelling on.
-
-Following this tutorial Marga sent and applying to the test data:
-
-<https://raffaelevacca.github.io/Intro-multilevel-with-R/>
-
-Testing a nested dataset by country
-
+Elastic Net:
 
 ```{r}
-# Commented the below as we are probably not gonna use it
-# 
-# nested.cntry <- complete_df %>%
-#   group_by(country) %>%
-#   nest()
-# 
-# # The column nested.df$data is a list of data frames, one for each country
-# class(nested.cntry$data) # type, list
-# length(nested.cntry$data) # number of countries
-# 
-# # to unnest()
-# nested.cntry %>%
-#   filter(country == "AT") %>%
-#   dplyr::select(country, data) %>%
-#   unnest(cols = c(data))
+# Extracting all coefficients of the best Elastic Net Model
+coefficients <- coef(elastic_net_model$finalModel, s=elastic_net_model$bestTune$lambda)
 
-# # Using the nested data, we now run a model for each country:
-
-# # fit separate lm for each each element of nested.cntry$data)
-# lmodels <- nested.cntry %>%
-#   # Get all data frames
-#   pull(data) %>%
-#   # Run glm() on each via map because it's a classification model
-#     # model run against all vairables for now. 
-#   purrr::map(~ glm(trans_docs ~ ., 
-#                    data= .x,
-#                    family = "binomial"))
-# 
-# # show that it's a list and we can call each elements regression output. 
-# class(lmodels)
-# lmodels[4]
+# Printing all the non 0s
+non0_coefficients <- data.frame(
+  feature = rownames(coefficients),
+  coefficient = as.numeric(coefficients))  |>  
+  filter(coefficient != 0) |> 
+  arrange(desc(abs(coefficient)))
+non0_coefficients
 ```
 
-#### Mixed models
 
-Fixed effects: Things that are the same across the cluster
-Random effects: Things that change within the cluster
-
-The fixed and random effects could refer to either the intercept or the
-slope, as these can both vary between groups.
-
-##### LMM equation structure in R
-
-To run a multilevel linear model, we use the lmer() function (“Linear
-Mixed Effects in R”) from the lme4 package. The syntax is similar to
-regression. everything to the left of the \| indicates the effects that
-should be random, and the variable to the right of the \| is the
-grouping variable across which the effects should vary
-
-*Null model* This has no slope, but random intercepts. It basically just
-takes the average. It has no independent (X) variables and is the proper
-naïve model.
-
-null_model \<- lmer(Y \~ (1\|cntry), data = ess)
-
-*Random intercept model:* --\> Only the intercept differ. The slopes are
-equal for each group. We assume the same effect of X on Y for each
-group. Just that the group causes the difference.
-
-random_int_model \<- lmer(Y \~ X + (1 \| group), data=df)
-
-*Random intercept, random slope model* --\> Now we also let the slope
-vary by group. This means each group basically has it's own model. It is
-
-random_intslope_model \<- lmer(Y \~ X + (X \| group), data=df)
-
-For each, Y=target, X = independent vars (can be many)
-
-##### Standard LMM Modelling Strategy
-
-(sourced from slides here:
-<https://favstats.github.io/intro_multilevel/slides/#54>) \^ This is a
-useful resource, it goes through an ESS modelling doc
-
-Approach to multilevel model building based on Hox (2010)
-
-1/ Null Model (Random Intercept only) 2/ Add independent Level 1
-variables 3/ Add independent Level 2 variables 4/ Add random slopes 5/
-(Cross-level) interactions
-
-Each step, check whether your model is significantly improved compared
-to the previous one.
-
-##### Basic LMM testing with toy data
-
-First, null model:
+Random Forest:
 
 ```{r}
-# m_null <- glmer(trans_docs ~ (1|country),
-#                data = complete_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
-# summary(m_null)
+# Plotting the top 10 most important variables 
+varImp(rf_model, scale = F)$importance %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("variable") %>%
+  arrange(desc(Overall)) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(x = reorder(variable, Overall), y = Overall)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    labs(title = "Feature Importance - Random Forest",
+       x = "Features", y = "Importance") +
+    theme_minimal()
 ```
 
-To come back and reinterpret... don't really know at this stage.
-
-Test flexplot and broom.mixed usage:
+Gradient Boosting:
 
 ```{r}
-# #devtools::install_github("dustinfife/flexplot")
-# library(flexplot)
+# Plotting the top 10 most important variables 
+varImp(gbm_model, scale = F)$importance %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("variable") %>%
+  arrange(desc(Overall)) %>%
+  slice_head(n = 10) %>%
+  ggplot(aes(x = reorder(variable, Overall), y = Overall)) +
+    geom_bar(stat = "identity") +
+    coord_flip() +
+    labs(title = "Feature Importance - Gradient Boosting",
+       x = "Features", y = "Importance") +
+    theme_minimal()
 ```
 
-Here it has some examples of code and output for saved logistic model
-fits
-
-```{r}
-# # don't think flexplot will be super useful as we have so many categorical variables
-# flexplot::logistic_fit
-# flexplot::mixed_logistic
-# flexplot::visualize(m_null)
-# 
-# # broom.mixed is used to tidy up the stats outputs into a tibble
-# broom.mixed::tidy(m_null) # summary output in tibble
-# broom.mixed::glance(m_null) # model performance summary
-
-```
-
-Random effects model
-
--   Including individual level variables only with country:
-
-```{r}
-# n_randeffect <- glmer(trans_docs ~ 
-#                         gender + age + I(age^2) + life_sat + religion + social_class + 
-#                         (1|country),
-#                data = complete_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
-```
-
-This suggests the data needs to be rescaled, to check which variables
-are the issue:
-
-```{r}
-# # check for nearzero variance, if so those could be removed
-# nearZeroVar(complete_df, saveMetrics = TRUE)
-# # see no issues. So all variables stay.
-# 
-# # will recode the numeric variables I selected, which is only age
-# scaled_df <- complete_df |>
-#   mutate(across(where(is.numeric), scale))
-```
-
-Re check the random effects model with scaled data:
-
-```{r}
-# n_randeffect <- glmer(trans_docs ~
-#                         gender + age + I(age^2) + life_sat + (1|country),
-#                data = scaled_df,
-#                family = "binomial",
-#                control = glmerControl(optimizer = "bobyqa"),
-#                nAGQ = 10)
-# 
-# 
-# 
-# summary(n_randeffect)
-```
-
-Can we interpret this...
-
-*Example Random effects models:* m \<- glmer(remission \~ IL6 + CRP +
-CancerStage + LengthofStay + Experience + (1 \| DID), data = hdp, family
-= binomial, control = glmerControl(optimizer = "bobyqa"), nAGQ = 10)
-
-*Example from last year code* glm_model_4 \<- glmer(binary_qc19 \~
-male + d11 + I(d11\^2) + political_ideology + Religion_cat +
-sd1_7_factor + d60_ordinal + qc15_1_ordinal + prop_gndr_bin +
-prop_dis_wide + Unemployment + (1 \| country_name), data = Data, family
-= binomial, control = glmerControl(optimizer = "bobyqa", optCtrl =
-list(maxfun = 100000)))
-
-*Potentially useful package for visualising and interpreting linear
-mixed models:* Flexplot -\> <https://github.com/dustinfife/flexplot>
-Functions to quickly visualise LMM models and compare their performance.
-
-
-broom.mixed The function broom.mixed::tidy() gives us all model
-parameters (random and fixed).
-
-*Useful calculations:* - ICC (intra cluster correlation. How alike each
-of the observations within each group are) - ANOVA for model comparison:
-anova(null_model, lvl1_preds_model, lvl2_preds_model, rs_preds_model)
-
-
+Most important variables comments...
