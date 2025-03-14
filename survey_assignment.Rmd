@@ -2609,13 +2609,35 @@ plot.roc(scaled_df$trans_docs, predicted_probs,
 
 This model, although computationally expensive, is a marginal improvement on the previous best model (model 1, individual fixed effects). The model fit has improved.  We see that in this full model, the AIC dropped to 23606. However, the BIC increased from the model 1, so that does create some uncertainty. 
 
-The predictive power actual increases very very marginally. The AUC increases from 0.8389 to 0.8394 in the full model. This may indicate the predictive power is maximised around 84%, given such minor improvements for 
+The predictive power actual increases very very marginally. The AUC increases from 0.8389 to 0.8394 in the full model. This may indicate the predictive power is maximised around 84%, given such minor improvements, the model with only individual level fixed effects is preferred. 
+
+##### Cross-level effects 
+
+When looking at just the cross-level effects, the significant relationships and the direction of the relationship were: 
+right_wing × lgbt_policy_index (negative)
+genderWoman × lgbt_policy_index (positive)
+non_believer × democracy_index (negative)
+non_believer × gender_inequality_index (negative)
+
+These effects are interpreted as the relationships between an individual-level variable and the outcome variable changes depending on the value of a country-level variable.
+
+For the right wing x lgbti policy variable, as the coefficient is negative, we infer that the effect of being right wing is weaker in countries with higher lgbti policies. So more mild right wing opposition to transgender documenation occurs in more progressive countries. This makes sense and maybe helps capture some of the political variance between countries. 
+
+For the women x lgbti policy variable, suggests that the effect of being a since it's positive, we conclude that the effect of being a women in countries with stronger lgbti policies is stronger. 
+
+For non-believer x democracy index and gender inequality index, being negative, this implies that the effect of being a non-believer is weaker in countries with with higher democracy score and also more gender inequality (as this is a negative scale, greater equality comes with lower scores). This could align with more progressive democratic countries having lower levels of religion and higher support for the target variable. 
 
 ### Interpreting results
 
-The best model is the full model with all of the indiviudal-level, country-level and cross-level effects included. However the gains are very marginal from the previous best model. So depending on needs, the model 1 may be the better option due to simplicity in interpretation and efficiency of computation. 
+The best model is the full model with all of the individual-level, country-level and cross-level effects included. However the gains are very marginal from the previous best model. So depending on needs, the model 1 may be the better option due to simplicity in interpretation and efficiency of computation. 
 
-These mixed models allow us to select the best level of model to use. The best model is model 1, with individual level fixed effects and a country level random slope. This is because it has good predictive power and does not overfit the model. The final model with cross-level effects is very computationally expensive and offers little improvement 
+These mixed models allow us to select the best level of model to use. The best model is model 1, with individual level fixed effects and a country level random slope. This is because it has good predictive power and does not overfit the model. The final model with cross-level effects is very computationally expensive and offers little improvement on the more simple model. For this, we prefer the model with indiviudal level fixed effects and a random slope for country as the best model. 
+
+#### Key variables 
+
+The key variables in the preferred model that are significant include 
+
+#### Model classification power
 
 Here we can show the distribution of our preferred model, with random slopes for country and fixed individual effects. 
 
@@ -2669,12 +2691,7 @@ summary_table |>
 
 ```
 
-Secondary plot, show our mixed model estimates in relation to the actual value. which over/under estimated. 
-
-```{r}
-
-```
-
+From this section we can see that the 3 GLM models are very similar. The step 2 (red) and step 3 (green) models are indistinguishable. There is some small difference in country level classification power to the step 4 cross-level effects if you look very closely on some countries. However, these models have similar trends. They classify observations that have a more even split of support. While the countries with more extreme support/opposition provide a class imbalance challenge for the explanatory model.  
 
 # Predictive model
 
@@ -2822,11 +2839,11 @@ data_aggr <- data_aggr |>
 dim(data_aggr)
 ```
 
-
 The resulting data frame has 28 observations and 79 variables. 
 
 ## Linear regression with Elastic Net
 
+Model output compared below in predictive model performance section. 
 ```{r}
 data_models <- data_aggr |> 
   select(-country)
@@ -2856,12 +2873,13 @@ elastic_net_model <- train(
 )
 
 # Display the best alpha and lambda values
-print(elastic_net_model)
+#print(elastic_net_model)
 elastic_net_model$bestTune
 ```
 
 ## Random forest
 
+Model output compared below in predictive model performance section. 
 ```{r, message=FALSE}
 set.seed(123)
 
@@ -2889,7 +2907,7 @@ rf_model <- train(
 )
 
 # Results
-print(rf_model)
+#print(rf_model)
 plot(rf_model)
 rf_model$bestTune
 ```
@@ -2897,6 +2915,7 @@ rf_model$bestTune
 
 ## Gradient boosting
 
+Model output compared below in predictive model performance section. 
 ```{r, message=FALSE}
 set.seed(123)
 
@@ -2921,11 +2940,13 @@ gbm_model <- train(
   tuneGrid = gbm_grid,
   verbose = FALSE)
 
-print(gbm_model)
+#print(gbm_model)
 gbm_model$bestTune
 ```
 
-## Comparing predictions
+## Predictive model performance 
+
+Here we analyse the benchmark model and 3 predictive models. We aggregate all the performance metrics in this section and provide commentary afterwards on what the best model is. 
 
 ```{r}
 # Adding benchmark (mean)
@@ -3026,6 +3047,10 @@ all_predictions$best_model <- apply(all_predictions[, c("elastic_error", "rf_err
 table(all_predictions$best_model)
 ```
 
+Overall, the random forest and gradient boost are the best models. The gradient boost model predicts better at the extreme values however i.e. countries with very high or very low support for the target variable. This is because of the class imbalance at these levels. 
+
+The random forest on the other hand, does not predict the more extreme country values as well. 
+
 ### Checks for overfitting in GBM
 
 ```{r}
@@ -3045,6 +3070,7 @@ ggplot(residuals_df, aes(x = actual, y = gbm_residuals)) +
 ```
 
 ## Variables importance
+Commentary for all 3 models provided after the three plots. 
 
 Elastic Net:
 
@@ -3060,7 +3086,6 @@ non0_coefficients <- data.frame(
   arrange(desc(abs(coefficient)))
 non0_coefficients
 ```
-
 
 Random Forest:
 
@@ -3096,4 +3121,19 @@ varImp(gbm_model, scale = F)$importance %>%
     theme_minimal()
 ```
 
-Most important variables comments...
+The most important variables in the predictive models are consistent with what we have seen throughout the modelling process, from the simple logistic regression to explanatory mixed model, to predictive model. 
+
+# Conclusions
+
+After extensive variable selection, tuning and model testing. We found that the best explanatory model was a cross-level mixed model that was able to correctly classify around 84% of observations. We note however, this model is only slightly better than much more computationally efficient softwares. This includes the basic simple logistic regression which classified around 82% of observations correctly, and the basic mixed model which has only a random intercept and individual-level data, which classified just under 84% correctly. For this, it is our preferred explanatory model. 
+
+Across the models, in summary, some factors that were related to supporting the policy included: 
+- having trans friends, being a non-believer, being an everyday internet user, 
+
+While some of the factors related to opposing the policy included: 
+- expressing anti-LGBTQ+ views, expressing more discriminatory views against minorities, having lower life satisfaction and expressing a more right wing ideology. 
+
+We believe that most of these are logical connections to support a more progressive inclusion policy. 
+
+The models were less accurate for countries with higher class imbalance i.e. more extreme positive or negative views.  
+
