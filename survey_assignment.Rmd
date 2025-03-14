@@ -257,23 +257,24 @@ and `qc14` and `qc16`
 <br>
 
 Some of the doubts we had:
+This section will perform initial analysis of variables and there relationship to the target. A value of 1 on the y-axis represents 100% support for transgender rights to change civil papers, a value of 2 represents 100% opposition to the question. Don't knows are removed from this section. 
 
 AGE
 
 ```{r}
-x_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
-ggplot(x_df, aes(x = d11, y = mean)) + geom_point()
+x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d11)
+ggplot(x_df, aes(x = d11, y = mean)) + geom_point() + geom_smooth()
 ```
 
-As relationship seems pretty linear we are going to use the continuous variable for age. 
+As relationship seems pretty linear we are going to use the continuous variable for age. Variance increases at high ages due to fewer respondents.  
 
 <br>
 
 POLITICAL OPINIONS
 
 ```{r}
-x_df <- data_raw |> summarise(mean = mean(qc19), .by = d1)
-ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + xlim(1,10)
+x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d1)
+ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + geom_smooth() + xlim(1,10) 
 ```
 
 For political opinions it seems that the relationship is less linear so we will work on the categories variable. Indeed, there seems to be a clear group (1to4) which is the same used in the variable with 3 categories (left, center and right so we will use the 3-categories variable.
@@ -283,8 +284,8 @@ For political opinions it seems that the relationship is less linear so we will 
 MARRIAGE
 
 ```{r}
-x_df <- data_raw |> summarise(mean = mean(qc19), .by = d7r1)
-ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5)
+x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d7r1)
+ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5) 
 ```
 
 Of all the possible combinations this one seems the best to highlight
@@ -311,15 +312,13 @@ strong is your interest in politics in various domains
 EXPERIENCED DISCRIMINATION
 
 For the questions about whether you have experienced discrimination
-`qc2_` I am keeping only `qc2_15` which is a binary on whether you have
-experienced any discrimination or not and I am not keeping the other
+`qc2_` we are keeping only `qc2_15` which is a binary on whether you have
+experienced any discrimination or not. We do not include the other
 categories that allowed us to understand if you had experienced
-discrimination on the basis of a particular motive. We can probably
-assume that if a person is a part of a specific minority (info from
-`sd2`) and is being discriminated is because of being part of that
-minority (at least in most cases), therefore it felt like information we
-already had (and which we can easily put in our regression using
-interaction effects)
+discrimination on the basis of a particular motive. There are data quality 
+issues with these variables and we can infer that if a person is a part of a 
+specific minority (info from `sd2`) and is being discriminated, it is due to 
+that minority status (at least in most cases).
 
 <br>
 
@@ -327,12 +326,10 @@ PERCIEVED DISCRIMINATION in country
 
 This is a question (`qc1`) about how widespread you perceived
 discrimination is in your country. It is a rather peculiar question
-because it asks individuals for perception at the country level. I think
-it might be more useful (by aggregating results by country) to use it to
-build a country level indicator of perceived discrimination against
-certain minorities that are of our interest rather than use it as an
-individual level variable. So I will keep them out of the dataset for
-now
+because it asks individuals for perception at the country level. 
+Due to the nature of mixed modelling, we have prioritised using the EU survey 
+to create individual level discrimination measures. The country level measures
+are captured in that country level data.
 
 For the same reason I am also discarding `qc4` that asks whether in your
 country you feel like candidates with certain characteristics would be
@@ -346,19 +343,20 @@ towards reducing discrimination are effective in your country.
 
 HOW DISCRIMINATORY ARE YOU SCORE
 
-I use `qc12` and `qc13` to build a score from 1 to 10 of how
-discriminatory are you against certain minorities. I am building the
+We use `qc12` and `qc13` to build a score from 1 to 10 of how
+discriminatory are you against certain minorities. We build the
 score for each minority and then we can decide later if some are
 irrelevant.
 
 Note for some categories this score is a bit stupid (ex. voting for
 whether you would feel uncomfortable if your child was in a love
-relationship with a old person would give you a high racist score
+relationship with a old person would give you a high discrimination score
 against old people, this is an example of some of the categories for
 which it is worth excluding the index)
 
-We can also further aggregate to obtain just one score (or obtain
-religious/ethnic score etc.).
+We aggregate these into scores for discrimination (e.g.religious/ethnic score 
+etc.). When required, we can further aggregate to obtain just one score 
+measuring individual discrimination. 
 
 `qc6` also asks about discriminatory behaviors, but is about elected
 public official, it does not ask about a situation that impacts you
@@ -372,7 +370,7 @@ SUPPORTIVE OF LGBTQ RIGHTS INDEX
 Using `qc15` we can again build an index for how supportive of lgbtq
 rights a person is.
 
-I again choose to take the mean across the different answers but we
+We again choose to take the mean across the different answers but we
 could also use median/mode if we think is better
 
 We could also use `qc18` to try to capture anti lgbtq sentiment, but I
@@ -383,18 +381,21 @@ preferred `qc15` as it seemed more straightforward (I therefore deleted
 
 MY VOICE COUNTS
 
-I guess that people that feel alienated from society and politics might
-be less likely to support lgbtq rights so I took the mean of `d72`
-question which asked whether you felt like your voice mattered.
+We have used this as a proxy for social alienation. We hypothesised that people 
+who feel alienated from society and politics might be less likely to support 
+lgbtq rights so we took the mean of the two subquestions in `d72`, which
+ask whether you felt like your voice mattered.
 
 <br>
 
 OTHERS
 
-`qc11` is a strange question feels useless to me, I removed it.
+`qc11` (willingness to provide information) is a strange question feels useless to me, I removed it.
 
 I also removed `qc9` as I don't really know what to do with it and
 `qc17`.
+
+Here we select our initial variables of interest from the above discussion. 
 
 ```{r}
 data <- data_raw |> 
@@ -434,7 +435,7 @@ paradata <- data_raw |>
          p2, p3, p3r, p4, p5) # paradata)
 ```
 
-Removing some of the previously selected variables
+Removing some of the disaggregrated questions
 
 `sd2_7` to `sd2_10`, these are possible answer deemed irrelevant to the
 question about yourself being part of the following minorities: `sd2_7`
@@ -474,6 +475,8 @@ Most columns do not have explicit NAs:
 ```{r, fig.height=6}
 plot_missing(data)
 ```
+
+### Extract data labels
 
 Exploiting the fact that the .dta files has attributes (labels) for all
 its columns.
@@ -534,7 +537,9 @@ data <- data |>
 
 <br>
 
-Separating variables for which I can use the attribute labels to
+### Recode all factor NA's
+
+Separating variables for which we can use the attribute labels to
 factorize them and the variables for which this strategy cannot be used
 
 ```{r}
@@ -586,6 +591,8 @@ data <- data |>
 ```
 
 <br>
+
+### Create new individual level measures
 
 Dealing with the other variables on which we do some further
 pre-processing (feature engineering).
@@ -640,7 +647,7 @@ data <- data |>
   select(-starts_with("qc13"))
 ```
 
-I am deleting the discrimination index against young and old people. This is because one of the question is: how comfortable you would feel if one of your children was in a love relationship with a person from group x. It is totally acceptable that people would not feel comfortable with their kid dating an old person without that meaning that they are being discriminatory against old people.
+We delete the discrimination index against young and old people. This is because one of the question is: how comfortable you would feel if one of your children was in a love relationship with a person from group x. We don't believe these are relevant to our target or discrimination score. 
 
 ```{r}
 data <- data |> 
@@ -813,7 +820,7 @@ data |> count(religion)
 
 In this section we will convert all levels of factors that are redundant to NAs.
 
-First we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude `friends_trans` because for that category it could be worth analyzing refusals.
+First we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer, we treat is as equivalent to not knowing his or her answer. We exclude `friends_trans` because for that category it could be worth analyzing refusals.
 
 ```{r}
 factor_variables <- names(data)[sapply(data, is.factor)]
@@ -953,15 +960,15 @@ ggplot(data_summary, aes(x = gender, y = percentage, fill = trans_docs)) +
     axis.ticks.x = element_blank()
   )
 
-# Crear una tabla de contingencia
+# Create contingency table
 contingency_table <- table(data$gender, data$trans_docs)
 
-# Realizar la prueba de chi-cuadrado
+# Calculate chisquare test
 chisq_test <- chisq.test(contingency_table)
 print(chisq_test)
 ```
 
-Men exhibit a lower percentage of favorable or don't knoe responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
+Men exhibit a lower percentage of favorable or don't know responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
 
 #### Age
 
@@ -1028,19 +1035,47 @@ We see that differences among age groups are not so evident anymore.
 
 We have two variables related to religiosity: `religion` (the religious affiliation professed by the respondent) and `religious_minority` (whether or not the respondent belongs to a religious minority group).
 
-For the first one it's better to show a cross table instead of a plot, since there are a lot of categories.
-
 ```{r}
-CrossTable(data$religion, data$trans_docs,
-           digits = 2, 
-           expected = FALSE, 
-           asresid = TRUE, 
-           chisq = TRUE, 
-           prop.chisq = FALSE, 
-           format = "SPSS")
-```
+data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
+  mutate(religious_minority = fct_recode(religious_minority, "Yes" = "1", "No" = "0")) |> 
+  count(trans_docs, religion, name = "n") |> 
+  group_by(religion) |>  
+  mutate(percentage = n / sum(n))
 
-The extremely small p-value confirms that the relationship between `religion` and `trans_docs` is highly statistically significant.
+ggplot(data_summary, aes(x = reorder(religion, ifelse(trans_docs == "Yes", -percentage, 0)), y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_stack(vjust = 0.5), size = 4) + 
+  scale_y_continuous(labels = percent_format()) + 
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
+  ) +
+  labs(
+    title = "Support for the right of trans people to change their gender in civil documents",
+    x = "Are you part of a religious minority?",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+# Create contingency table
+contingency_table <- table(data$religion, data$trans_docs)
+
+# Calculate chisquare test
+chisq_test <- chisq.test(contingency_table)
+print(chisq_test)
+
+```
+The small p-value confirms that the relationship between `religion` and `trans_docs` is statistically significant. We see that non-believers are most likely to support the rights, while people who are Orthodox Christian and Muslim are most likely to oppose the rights. They are also most likely to not provide a don't know response.
+
+We then run for the religious minority question (sd2_2). This provides us with less clear results. 
 
 ```{r}
 data_summary <- data |> 
@@ -1107,7 +1142,7 @@ ggplot(data_summary, aes(x = left_right, y = percentage, fill = trans_docs)) +
 
 Stronger left-wing support for trans rights. Right-wing respondents are
 the most divided, with high opposition levels. Non-responses are highest
-among those without ideological alignment.
+among those without ideological alignment and right leaning respondents. 
 
 #### Social class
 
@@ -1150,13 +1185,40 @@ lack of support and no response are higher for lower-class individuals.
 #### Education
 
 ```{r}
-ggplot(data, aes(x = trans_docs, y = years_edu)) +
-  geom_violin() +
-  labs(x = "Support for trans people changing their civil documents", y = "Age when stopped full-time education") +
-  ggtitle("Distribution of support by education")
+# limit to main age ranges in age completed
+data |> 
+  mutate(main_educ = ifelse(between(years_edu, 15, 30), 1, 0)) |> 
+  group_by(main_educ) |> 
+  summarise(count = n(),
+            prop = count/nrow(data)*100)
+
+data |> 
+  filter(between(years_edu, 15, 30)) |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
+  count(trans_docs, years_edu, name = "n") |> 
+  group_by(years_edu) |>  
+  mutate(percentage = n / sum(n)) |> 
+  ggplot(aes(x = years_edu, y = percentage, fill = trans_docs)) +
+      geom_bar(stat = "identity", position = "fill") +
+    geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_stack(vjust = 0.5), size = 3) + 
+  scale_y_continuous(labels = percent_format()) + 
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
+  ) +
+  labs(
+    title = "Distribution of support by education",
+    x = "Age completed education, from 15 to 30 years old",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank())
+
 ```
 
-Support doesn't seem to be related to education.
+Limiting the data top only look at support around the main education. Which includes around 87% of the observations, we see a less clear relationship between age finishing education and support. However those who appear to finish education before age 20 tend to have higher opposition. 
 
 #### Area of residence
 
@@ -1343,7 +1405,7 @@ CrossTable(merged_paradata$p4, merged_paradata$trans_docs,
 
 ```
 
-The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents
+The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents. The actual support does not vary too much though, they are all within 3% of each other.  
 
 ### Duration of interview
 
@@ -1360,6 +1422,8 @@ CrossTable(merged_paradata$p3r, merged_paradata$trans_docs,
            format="SPSS")
 
 ```
+
+It appears that the longer the interview, the more likely to support the people are. The highest support being 75-89 minutes while the highest opposition and and highest DK were in <15 minute interviews. 
 
 ### Respondent cooperation
 
@@ -1394,7 +1458,9 @@ ggplot(data_summary, aes(x = p5, y = percentage, fill = trans_docs)) +
 ```
 
 Respondents who engaged better in the survey were more likely to express
-support.
+support. This is the most clear paradata relationship. 
+
+Low cooperation had higher DK response and opposition to trans documents support. 
 
 # Correlation and multicollinearity
 
