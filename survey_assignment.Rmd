@@ -2774,7 +2774,7 @@ data_dummy <- final_data %>%
                 .names = "{.col}_num"))
 ```
 
-I converted factors with 2 levels to numerical 0-1 so we can compute their means.
+We convert factors with 2 levels to numerical 0-1 so we can compute their means.
 
 ```{r}
 # Country means
