@@ -2359,7 +2359,6 @@ complete_df <- complete_df |>
 str(complete_df)
 ```
 
-
 ## Mixed model
 
 Random Intercept Model:
@@ -2411,13 +2410,13 @@ To model, we will follow: Approach to multilevel model building based on Hox (20
 5/ (Cross-level) interactions
 
 Each step, check whether your model is significantly improved compared
-to the previous one.
+to the previous one. We are actually aggregating step 4 and 5 due to computational times.
 
 Adjusted ICC: The proportion of total variance explained by the grouping structure (random effects), adjusted to include the variance explained by the fixed effects
 
 Unadjusted ICC: The proportion of total variance explained by the grouping structure (random effects), excluding any variance explained by the fixed effects in the model
 
-#### Null mixed model - country level random effects only
+#### Mixed model 1 - null model country level random effects only
 
 ```{r, message=FALSE}
 complete_df <- complete_df |> 
@@ -2451,13 +2450,13 @@ auc(scaled_df$trans_docs, predicted_probs)
 # ICC
 performance::icc(glmer_step1)
 ```
-The AUC here measures the models ability to determine trans_docs by country by country only differences. The AUC of 0.7405 shows just using country, you have better than random prediction (which would be 0.5). 
+The AUC here measures the models ability to determine trans_docs by country only differences. The AUC of 0.7405 shows just using country, you have better than random prediction (which would be 0.6 given that our class balances is 60% Yes and 40% No). 
 
 The ICC represents the proportion of variance in trans_docs attributable to differences between countries. The value of 0.227 shows that country is a significant variable, but indiviudal level varibles must be included to make this a properly good explanatory model. 
 
 The AIC (28212) can be used for model performance later. If AIC reduces, the other models are improvments. 
 
-#### Mixed model 1 - adding in individual-level fixed effects 
+#### Mixed model 2 - adding in individual-level fixed effects 
 
 ```{r, message=FALSE}
 # Random intercept + individual fixed effects
@@ -2492,7 +2491,7 @@ The model is improved. We have a significantly reduced AIC (23612) and also see 
 
 The ICC has reduced, this indicates that the indiviudual level variables are now explaining some of the variance previously explained by the country level variable.
 
-#### Mixed model 2 - adding in country-level fixed effects 
+#### Mixed model 3 - adding in country-level fixed effects 
 
 ```{r, message=FALSE}
 # Random intercept + individual fixed effects + country fixed effects
@@ -2523,9 +2522,13 @@ anova(glmer_step1, glmer_step2, glmer_step3)
 
 In this model, when including country level fixed effects too, we see:
 
-An overfitted model compared to step 2 (indiviudal fixed effects). A better model compared to step 1 (null).The model is overfitted because performance and predictive power do not improve comapred to step 2 but we have additional variables. The AUC is equivalent while the AIC has increased (indicating worse overall model fit). 
+An overfitted model compared to step 2 (indiviudal fixed effects). 
 
-#### Mixed model 3 - adding in cross-level interactions and random slopes 
+A better model compared to step 1 (null).
+
+The model is overfitted because performance and predictive power do not improve comapred to step 2 but we have additional variables. The AUC is equivalent while the AIC has increased (indicating worse overall model fit). Although we are adding complexity the model is not getting better.
+
+#### Mixed model 4 - adding in cross-level interactions and random slopes 
 
 This final mixed model includes cross-level interactions between individual and country level data. The following interactions are included in our models:
 
@@ -2546,7 +2549,6 @@ This final mixed model includes cross-level interactions between individual and 
 `unhappy:lgbt_policy_index`: Tests how the relationship between an individual's unhappiness (or life dissatisfaction) and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
  
 `poor:democracy_index`: Tests how the relationship between an individual's economic status (being poor) and their attitudes toward transgender people varies depending on the democratic context of their country.
-
 
 ```{r, message=FALSE}
 # Adding random slopes and cross level interaction
@@ -2579,7 +2581,8 @@ glmer_step4 <- glmer(trans_docs ~
 ```
 
 Run the diagnostics: 
-```{r}
+
+```{r, message=FALSE}
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step4))
 # Random intercepts coefficients
@@ -2611,31 +2614,41 @@ This model, although computationally expensive, is a marginal improvement on the
 
 The predictive power actual increases very very marginally. The AUC increases from 0.8389 to 0.8394 in the full model. This may indicate the predictive power is maximised around 84%, given such minor improvements, the model with only individual level fixed effects is preferred. 
 
+We have an accuracy 0.76. The model is better at identifying negatives than positives since specificity (83.11%) is higher than sensitivity (68.65%), indeed the AUC graph suggests changing the threshold to around 0.4 from 0.5 so as to better balance those two metrics
+
 ##### Cross-level effects 
 
 When looking at just the cross-level effects, the significant relationships and the direction of the relationship were: 
+
 right_wing × lgbt_policy_index (negative)
+
 genderWoman × lgbt_policy_index (positive)
+
 non_believer × democracy_index (negative)
+
 non_believer × gender_inequality_index (negative)
 
 These effects are interpreted as the relationships between an individual-level variable and the outcome variable changes depending on the value of a country-level variable.
 
-For the right wing x lgbti policy variable, as the coefficient is negative, we infer that the effect of being right wing is weaker in countries with higher lgbti policies. So more mild right wing opposition to transgender documentation occurs in more progressive countries (those with stronger lgbti views). This makes sense and maybe helps capture some of the political opinion subjectivity between individuals in differenet countries. 
+For the right wing x lgbti policy variable, as the coefficient is negative, we infer that the effect of being right wing is weaker in countries with better lgbti policies. So more mild right wing opposition to transgender documentation occurs in more progressive countries (those with stronger lgbti views). This makes sense and maybe helps capture some of the political opinion subjectivity between individuals in differenet countries. 
 
-For the women x lgbti policy variable, suggests that the effect of being a women in countries with stronger lgbti policies is stronger. This is more difficult to interpret.
+For the women x lgbti policy variable, suggests that the effect of being a women in countries with stronger lgbti policies is stronger. Basically meaning that women tend to be more supportive of transgenders' rights in countries with more inclusive lgbtq policies
 
-For non-believer x democracy index and non-believer x gender inequality index, both are negative. This implies that the effect of being a non-believer is weaker in countries with with higher democracy score and also a higher gender inequality score (as this is a negative scale, the negative relationship indicatesa a positive correlation). This could align with more progressive democratic countries having lower levels of religion, more gender equality policies and higher support for our target variable.
+For non-believer x democracy index and non-believer x gender inequality index, both are negative. This implies that non-religious people are less likely to support transgenders’ rights in countries where there is higher gender inequality. This also implies that the effect of being a non-religious on support for trans rights is weaker in more democratic countries. Although this might sound counterintuitive, this could align with more democratic having lower levels of religiosity, and thus religion in general playing a lower impact on determining whether one supports or not transgenders' people rights. 
 
 ### Interpreting results
 
-The best model is the full model with all of the individual-level, country-level and cross-level effects included. However the gains are very marginal from the previous best model. So depending on needs, the model 1 may be the better option due to simplicity in interpretation and efficiency of computation. 
+The best model is the full model with all of the individual-level, country-level and cross-level effects included. However the gains are very marginal from the previous best model. The final model with cross-level effects is very computationally expensive and offers little improvement on the more simple model. So depending on needs, the model 1 may be the better option due to simplicity in interpretation and efficiency of computation. 
 
-These mixed models allow us to select the best level of model to use. The best model is model 1, with individual level fixed effects and a country level random slope. This is because it has good predictive power and does not overfit the model. The final model with cross-level effects is very computationally expensive and offers little improvement on the more simple model. For this, we prefer the model with indiviudal level fixed effects and a random slope for country as the best model. 
+It is also worth noting that ICC coefficients are quite low across all the models and that country-level fixed effects are not significant. This suggests that most of the variation is explained at the individual level rather than at the country level.
 
 #### Key variables 
 
-The key variables in the preferred model that are significant include 
+The key individual-level variables in the models that are significant include most of the variables that we had already individuated before.
+
+In particular women, people who use internet every day, people that are non-religious and people that know a transgender person tend to be more supportive. On the contrary males, people from ethnic minorities, unhappy people and right-wing people tend to oppose transgender rights more. Our discriminatory scores also seem always relevant with people being more discriminatory against minorities being less supportive of the right in question proving to be good index of discriminatory attitudes. 
+
+Perhaps counterintuitively, but consistent with our previous findings, age has a positive coefficient meaning that older people tend to be more supportive. Interpretation of this finding is difficult as our bivariate descriptive analysis seems to contradict this.
 
 #### Model classification power
 
@@ -2646,54 +2659,55 @@ Here we can show the distribution of our preferred model, with random slopes for
 prediction_summary <- scaled_df |> 
   select(trans_docs, 
          country) |> 
-  mutate(null_scaled = predict(glmer_step1),
-         null_model_pred = ifelse(null_scaled > 0.5, 1, 0),
-         m1_preds = predict(glmer_step2),
-         m1_model_pred = ifelse(m1_preds > 0.5, 1, 0),
-         m2_preds = predict(glmer_step3),
+  mutate(m1preds = predict(glmer_step1),
+         m1_model_pred = ifelse(m1preds > 0.5, 1, 0),
+         m2_preds = predict(glmer_step2),
          m2_model_pred = ifelse(m2_preds > 0.5, 1, 0),
-         m3_preds = predict(glmer_step4), 
-         m3_model_pred = ifelse(m3_preds > 0.5, 1, 0))
+         m3_preds = predict(glmer_step3),
+         m3_model_pred = ifelse(m3_preds > 0.5, 1, 0),
+         m4_preds = predict(glmer_step4), 
+         m4_model_pred = ifelse(m4_preds > 0.5, 1, 0))
 
 # calculate rates for each model at country level and pivot longer
 summary_table <- prediction_summary %>%
-  select(trans_docs, country, null_model_pred, m1_model_pred, m2_model_pred, m3_model_pred) |>
+  select(trans_docs, country, m1_model_pred, m2_model_pred, 
+         m3_model_pred, m4_model_pred) |>
   group_by(country) %>%
   summarise(
     actual_rate = mean(trans_docs)*100,
-    null_rate = mean(null_model_pred)*100,
     m1_rate = mean(m1_model_pred)*100,
     m2_rate = mean(m2_model_pred)*100,
-    m3_rate = mean(m3_model_pred)*100)
+    m3_rate = mean(m3_model_pred)*100,
+    m4_rate = mean(m4_model_pred)*100)
 
 #plot all of the model estimates on a graph
 # with unpivoted data
 summary_table %>%
   mutate(
-    null_model = "Null Model",
-    model_1 = "Model 1 (+individual fixed)",
-    model_2 = "Model 2 (+country fixed)",
-    model_3 = "Model 3 (+cross-level effects)"
+    model_1 = "Model 1 (null model = country random intercept)",
+    model_2 = "Model 2 (+individual fixed)",
+    model_3 = "Model 3 (+country fixed)",
+    model_4 = "Model 4 (+cross-level & country random slope)"
   ) %>%
   ggplot(aes(x = reorder(country, -actual_rate), y = actual_rate)) +
   geom_col(alpha = 0.5) +
-  geom_point(aes(y = null_rate, color = null_model),
+  geom_point(aes(y = m1_rate, color = model_1),
              size = 3, shape = 18,
              position = position_nudge(x = -0.3)) +
-  geom_point(aes(y = m1_rate, color = model_1),
+  geom_point(aes(y = m2_rate, color = model_2),
              size = 3, shape = 15,
              position = position_nudge(x = -0.1)) +
-  geom_point(aes(y = m2_rate, color = model_2),
+  geom_point(aes(y = m3_rate, color = model_3),
              size = 3, shape = 16,
              position = position_nudge(x = 0.1)) +
-  geom_point(aes(y = m3_rate, color = model_3),
+  geom_point(aes(y = m4_rate, color = model_4),
              size = 3, shape = 17,
              position = position_nudge(x = 0.3)) +
   scale_color_manual(name = "Mixed model Type",
-                       values = c("Null Model" = "blue",
-                                  "Model 1 (+individual fixed)" = "red",
-                                  "Model 2 (+country fixed)" = "green",
-                                  "Model 3 (+cross-level effects)" = "purple")) +
+                       values = c("Model 1 (null model = country random intercept)" = "blue",
+                                  "Model 2 (+individual fixed)" = "red",
+                                  "Model 3 (+country fixed)" = "green",
+                                  "Model 4 (+cross-level & country random slope)" = "purple")) +
   theme(axis.text.x = element_text(angle = 90, hjust = 0.5),
         axis.title.x = element_blank())+
   scale_y_continuous(labels = percent_format(scale = 1)) +
@@ -2705,12 +2719,9 @@ summary_table %>%
         legend.position = c(0.98, 0.98),  # Adjust coordinates for top right
         legend.justification = c("right", "top"),
         legend.background = element_rect(fill = "white", color = "gray"))
-
-
-
 ```
 
-From this section we can see that the 3 GLM models are very similar. The step 2 (red) and step 3 (green) models are indistinguishable. There is some small difference in country level classification power to the step 4 cross-level effects if you look very closely on some countries. However, these models have similar trends. They classify observations that have a more even split of support. While the countries with more extreme support/opposition provide a class imbalance challenge for the explanatory model.  
+From this section we can see that the 3 GLM models are very similar. The step 2 (red) and step 3 (green) models are indistinguishable. There is some small difference in country level classification power to the step 4 cross-level effects if you look very closely on some countries. However, these models have similar trends. They classify observations that have a more even split of support. While the countries with more extreme support/opposition provide a class imbalance challenge for the explanatory model, worsening its results.  
 
 # Predictive model
 
@@ -2863,6 +2874,7 @@ The resulting data frame has 28 observations and 79 variables.
 ## Linear regression with Elastic Net
 
 Model output compared below in predictive model performance section. 
+
 ```{r}
 data_models <- data_aggr |> 
   select(-country)
@@ -2892,13 +2904,13 @@ elastic_net_model <- train(
 )
 
 # Display the best alpha and lambda values
-#print(elastic_net_model)
 elastic_net_model$bestTune
 ```
 
 ## Random forest
 
 Model output compared below in predictive model performance section. 
+
 ```{r, message=FALSE}
 set.seed(123)
 
@@ -2926,7 +2938,6 @@ rf_model <- train(
 )
 
 # Results
-#print(rf_model)
 plot(rf_model)
 rf_model$bestTune
 ```
@@ -2935,6 +2946,7 @@ rf_model$bestTune
 ## Gradient boosting
 
 Model output compared below in predictive model performance section. 
+
 ```{r, message=FALSE}
 set.seed(123)
 
@@ -2959,7 +2971,6 @@ gbm_model <- train(
   tuneGrid = gbm_grid,
   verbose = FALSE)
 
-#print(gbm_model)
 gbm_model$bestTune
 ```
 
@@ -3023,31 +3034,64 @@ model_metrics <- rbind(
 print(model_metrics)
 ```
 
-We are able to predict so good partially because this is a set of observations which share many characteristics among them. Due to this low number of observations we are able to run LOOCV which yields amazing results. However, we should treat these results carefully, as the limited number of observation and such high performance metrics suggest that our models are prone to overfitting. Again this is mostly due to having few and similar observations, hence we are able to predict really well among those observations, but the generizability power of our model is quite low. We would need many more and many more diverse countries in our training dataset to build a model which could be applicable even outside Europe.
+By using just the mean of our target variable as a prediction we can see that the mean absolute error is 0.17. It means that by using the mean we are going to be off by 17% points on average, this provides a really good benchmark to understand the results. 
+
+<br>
+
+We are able to predict so good partially because this is a set of observations which share many characteristics among them. Furthermore, due to the low number of observations in our data we are able to run LOOCV which yields amazing results. However, we should treat these results carefully, as the limited number of observation and such high performance metrics suggest that our models are prone to overfitting. Again this is mostly due to having few and similar observations, hence we are able to predict really well among those observations, but the generizability power of our model is quite low. We would need many more and many more diverse countries in our training dataset to build a model which could be applicable outside of Europe.
 
 ```{r}
 # Sort predictions by actual values (descending)
 sorted_predictions <- all_predictions[order(all_predictions$actual, decreasing = TRUE), ]
 
 # Print sorted predictions
-print(sorted_predictions[, c("country", "actual", "benchmark", "elastic_net", "random_forest", "gradient_boosting")])
+print(sorted_predictions[, c("country", "actual", "elastic_net", "random_forest", "gradient_boosting")])
+```
 
-# Visualize predictions across countries
+It seems that random forests and elastic net struggle more in predicting extreme values of our target variable. The range of true values of our target variable goes from 15% to 90%, elastic net predictions only range within 20% and 85%, while random forests' predictions even worse, they range between 25% and 82%. Gradient boosting instead is able to predict better those extreme values and it seems that in this lies its better predictive performance.
+
+```{r}
+#plot all of the model estimates on a graph
+ggplot(sorted_predictions, aes(x = reorder(country, -actual), 
+                               y = actual)) +
+  geom_col(alpha = 0.5) +
+  geom_point(aes(y = elastic_net , color = "Elastic Net"),
+             size = 3, shape = 15,
+             position = position_nudge(x = -0.1)) +
+  geom_point(aes(y = random_forest, color = "Random Forest"),
+             size = 3, shape = 16,
+             position = position_nudge(x = 0.1)) +
+  geom_point(aes(y = gradient_boosting, color = "Gradient Boosting"),
+             size = 3, shape = 17,
+             position = position_nudge(x = 0.3)) +
+  geom_hline(aes(yintercept = mean(actual), 
+                 color = "Benchmark (mean)"), 
+           linetype = "dashed", linewidth = 0.7) +
+  scale_color_manual(name = "Model Type",
+                   values = c("Benchmark (mean)" = "black",
+                              "Elastic Net" = "red",
+                              "Random Forest" = "green",
+                              "Gradient Boosting" = "purple")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5),
+        axis.title.x = element_blank())+
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  labs(title = "Comparing predictive models regression results",
+       y = "Proportion of support",
+       x = "Countries, ordered by actual support") +
+  theme_minimal()+
+  theme(panel.grid = element_blank(),
+        legend.position = c(0.98, 0.98),
+        legend.justification = c("right", "top"),
+        legend.background = element_rect(fill = "white", color = "gray"))
+```
+
+We can see again how gradient boosting is almost always perfect, while random forest and elastic net alternate themselves for the second best moel depending on the country.
+
+```{r}
 # Reshape the data for plotting
-
 plot_data <- sorted_predictions %>%
-  select(country, actual, elastic_net, random_forest, gradient_boosting) %>%
-  gather(key = "model", value = "prediction", -country, -actual)
-
-# Create plot
-ggplot(plot_data, aes(x = reorder(country, -actual), y = prediction, fill = model)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  geom_point(aes(y = actual), color = "black", size = 2) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Model Predictions vs Actual Values by Country",
-       x = "Country", y = "Proportion Supporting Trans Document Changes") +
-  scale_fill_brewer(palette = "Set1")
+  select(country, actual, benchmark, elastic_net, random_forest, gradient_boosting) %>%
+  pivot_longer(cols = -c(country, actual, benchmark), names_to = "model", values_to = "prediction")
 
 # Create a scatterplot of actual vs predicted for each model
 ggplot(plot_data, aes(x = actual, y = prediction, color = model)) +
@@ -3066,7 +3110,7 @@ all_predictions$best_model <- apply(all_predictions[, c("elastic_error", "rf_err
 table(all_predictions$best_model)
 ```
 
-Overall, the random forest and gradient boost are the best models. The gradient boost model predicts better at the extreme values however i.e. countries with very high or very low support for the target variable. This is because of the class imbalance at these levels. 
+Overall, the gradient boosting is the best models. The gradient boost model predicts better at the extreme values however i.e. countries with very high or very low support for the target variable. This is because of the class imbalance at these levels. 
 
 The random forest on the other hand, does not predict the more extreme country values as well. 
 
@@ -3089,6 +3133,7 @@ ggplot(residuals_df, aes(x = actual, y = gbm_residuals)) +
 ```
 
 ## Variables importance
+
 Commentary for all 3 models provided after the three plots. 
 
 Elastic Net:
@@ -3140,19 +3185,40 @@ varImp(gbm_model, scale = F)$importance %>%
     theme_minimal()
 ```
 
-The most important variables in the predictive models are consistent with what we have seen throughout the modelling process, from the simple logistic regression to explanatory mixed model, to predictive model. 
+The variables that appear among the top 10 for importance in both random forest and gradient boosting include `gender_docs`, `antilgbtq_rights`, `roma_minority`, `occupation_Manual workers`, `lgbt_policy_index`, `left_right_(7-10) Right`, `mean_years_edu`. Of them, the first three also appear in the non-zero elastic net coefficients. They are consisted with what we had found before throughout all the modelling process. We opted to use only `antilgbtq_rights` and not `gender_docs` in the mixed models and we decided to use `ethnic_minority` instead of `roma_minority`, although it seems that we might have been better suited by the latter.
+
+These predictive models are able to extract valuable information from country-level indexes that were not significant in our predictive models such as `democracy_index` and `lgbt_policy_index`. They also suggests us that we should have maybe have included occupation as its level manual workers seems to be quite important. 
+
+Lastly machine learning methods (random forest and gradient boosting) make a positive use of `years_edu`, which is instead non relevant in Elastic Net and in all our previous model. This suggests us that the relationship between this variable and the target might not be linear and that to extract valuable information from this variable it would have been necessary to do some more feature engineering on it.
+
+Nonetheless, overall all the most relevant variables are coherent with theory and expectations and indeed many of them overlap with our previous findings. 
 
 # Conclusions
 
-After extensive variable selection, tuning and model testing. We found that the best explanatory model was a cross-level mixed model that was able to correctly classify around 84% of observations. We note however, this model is only slightly better than much more computationally efficient softwares. This includes the basic simple logistic regression which classified around 82% of observations correctly, and the basic mixed model which has only a random intercept and individual-level data, which classified just under 84% correctly. For this, it is our preferred explanatory model. 
+After extensive variable selection, cleaning, feature-engineering and feature selection we were able to detect many of the most relevant variables in explaining differences among support levels for the right of transgender to change their gender on civil documents. 
 
-Across the models, in summary, some factors that were related to supporting the policy included: 
-- having trans friends, being a non-believer, being an everyday internet user, 
+We built several logistic model culminating with a comprehensive logistic mixed model taking into account individual fixed effects, country fixed effects and cross level interactions. This model was only slightly better than much more computationally efficient and simpler models as most of the variance seemed to be explained through individual fixed effects. Nonetheless, it helped us gain even deeper insights into the nuances of support for transgenders' rights.
+
+We then aggregated all our variables to a country level and built predictive models to forecast support for the right to change gender on civil documents and obtained extremely accurate predictive models. Due to the low number of observations in our dataset, our models benefited from LOOCV, leading to impressive predictive performance. However, this also raises concerns about overfitting and limited generalizability beyond the European context. A larger and more diverse dataset would be necessary to enhance robustness and applicability.
+
+Across all the models, in summary, some factors that were related to supporting the policy included: 
+
+- being a women
+
+- knowing a transgender person
+
+- being non-religious
+
+- being an everyday internet user, 
 
 While some of the factors related to opposing the policy included: 
-- expressing anti-LGBTQ+ views, expressing more discriminatory views against minorities, having lower life satisfaction and expressing a more right wing ideology. 
+
+- expressing anti-LGBTQ+ views
+
+- expressing more discriminatory views against minorities, 
+
+- having lower life satisfaction 
+
+- expressing a more right wing ideology. 
 
 We believe that most of these are logical connections to support a more progressive inclusion policy. 
-
-The models were less accurate for countries with higher class imbalance i.e. more extreme positive or negative views.  
-
