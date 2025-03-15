@@ -257,11 +257,11 @@ and `qc14` and `qc16`
 <br>
 
 Some of the doubts we had:
-This section will perform initial analysis of variables and there relationship to the target. A value of 1 on the y-axis represents 100% support for transgender rights to change civil papers, a value of 2 represents 100% opposition to the question. Don't knows are removed from this section. 
+This section will perform initial analysis of variables and there relationship to the target. A value of 1 on the y-axis represents 100% support for transgender rights to change civil papers, a value of 2 represents 100% opposition to the question. Don't knows are removed from this section. These are quick graphs that served use in variable selection, not meant to be graphically appealing.
 
 AGE
 
-```{r}
+```{r, warning=FALSE}
 x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d11)
 ggplot(x_df, aes(x = d11, y = mean)) + geom_point() + geom_smooth()
 ```
@@ -272,7 +272,7 @@ As relationship seems pretty linear we are going to use the continuous variable 
 
 POLITICAL OPINIONS
 
-```{r}
+```{r, warning=FALSE}
 x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d1)
 ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + geom_smooth() + xlim(1,10) 
 ```
@@ -283,7 +283,7 @@ For political opinions it seems that the relationship is less linear so we will 
 
 MARRIAGE
 
-```{r}
+```{r, warning=FALSE}
 x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d7r1)
 ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5) 
 ```
@@ -1110,7 +1110,7 @@ ggplot(data_summary, aes(x = religious_minority, y = percentage, fill = trans_do
 
 #### Ideology
 
-```{r}
+```{r, warning=FALSE}
 data_summary <- data |> 
   mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   count(trans_docs, left_right, name = "n") |> 
@@ -2470,8 +2470,6 @@ glmer_step2 <- glmer(trans_docs ~ age + gender + social_class +
                      family = binomial(link="logit"))
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step2))
-# Random intercepts coefficients
-ranef(glmer_step2)
 # AIC
 AIC(glmer_step2)
 # AUC
@@ -2507,8 +2505,6 @@ glmer_step3 <- glmer(trans_docs ~ age + gender + social_class +
                      family = binomial(link="logit"))
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step3))
-# Random intercepts coefficients
-ranef(glmer_step3)
 # AIC
 AIC(glmer_step3)
 # AUC
@@ -2585,8 +2581,6 @@ Run the diagnostics:
 ```{r, message=FALSE}
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step4))
-# Random intercepts coefficients
-ranef(glmer_step4)
 # AIC
 AIC(glmer_step4)
 # AUC
@@ -2654,7 +2648,7 @@ Perhaps counterintuitively, but consistent with our previous findings, age has a
 
 Here we can show the distribution of our preferred model, with random slopes for country and fixed individual effects. 
 
-```{r}
+```{r, warning=FALSE}
 # summarise predictions
 prediction_summary <- scaled_df |> 
   select(trans_docs, 
@@ -3050,7 +3044,7 @@ print(sorted_predictions[, c("country", "actual", "elastic_net", "random_forest"
 
 It seems that random forests and elastic net struggle more in predicting extreme values of our target variable. The range of true values of our target variable goes from 15% to 90%, elastic net predictions only range within 20% and 85%, while random forests' predictions even worse, they range between 25% and 82%. Gradient boosting instead is able to predict better those extreme values and it seems that in this lies its better predictive performance.
 
-```{r}
+```{r, warning=FALSE}
 #plot all of the model estimates on a graph
 ggplot(sorted_predictions, aes(x = reorder(country, -actual), 
                                y = actual)) +
