@@ -1,3 +1,11 @@
 # Survey_Assignment
  
-Repository for the assignment of the course Survey Research Methodology II in the Master of Computational Social Sciences at Universidad Carlos III de Madrid
+This repository contains the work done by Diego Paroli, Irene García-Espantaleón Arta, Bradley McKenzie, Candela Gómez Blanco for the group assignment for the Survey Research Methodology II course in the Master in Computational Social Sciences at Universidad Carlos III de Madrid.
+
+The assignment involved using Eurobarometer survey data along with country-level data to develop two models:
+
+- An explanatory model to analyze the factors influencing support for the right of transgender people to change their gender on civil documents.
+
+- A predictive model to forecast support for this policy if introduced in additional countries.
+
+The repository includes a fully replicable .Rmd file containing the complete analysis, all the necessary data to run it and a final version of the work rendered as an .html file. Additionally, it features a written report summarizing key steps of the projects and our findings.

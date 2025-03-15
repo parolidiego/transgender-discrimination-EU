@@ -257,23 +257,24 @@ and `qc14` and `qc16`
 <br>
 
 Some of the doubts we had:
+This section will perform initial analysis of variables and there relationship to the target. A value of 1 on the y-axis represents 100% support for transgender rights to change civil papers, a value of 2 represents 100% opposition to the question. Don't knows are removed from this section. These are quick graphs that served use in variable selection, not meant to be graphically appealing.
 
 AGE
 
-```{r}
-x_df <- data_raw |> summarise(mean = mean(qc19), .by = d11)
-ggplot(x_df, aes(x = d11, y = mean)) + geom_point()
+```{r, warning=FALSE}
+x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d11)
+ggplot(x_df, aes(x = d11, y = mean)) + geom_point() + geom_smooth()
 ```
 
-As relationship seems pretty linear we are going to use the continuous variable for age. 
+As relationship seems pretty linear we are going to use the continuous variable for age. Variance increases at high ages due to fewer respondents.  
 
 <br>
 
 POLITICAL OPINIONS
 
-```{r}
-x_df <- data_raw |> summarise(mean = mean(qc19), .by = d1)
-ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + xlim(1,10)
+```{r, warning=FALSE}
+x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d1)
+ggplot(x_df, aes(x = d1, y = mean)) + geom_point() + geom_smooth() + xlim(1,10) 
 ```
 
 For political opinions it seems that the relationship is less linear so we will work on the categories variable. Indeed, there seems to be a clear group (1to4) which is the same used in the variable with 3 categories (left, center and right so we will use the 3-categories variable.
@@ -282,9 +283,9 @@ For political opinions it seems that the relationship is less linear so we will 
 
 MARRIAGE
 
-```{r}
-x_df <- data_raw |> summarise(mean = mean(qc19), .by = d7r1)
-ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5)
+```{r, warning=FALSE}
+x_df <- data_raw |> filter(qc19<3) |> summarise(mean = mean(qc19), .by = d7r1)
+ggplot(x_df, aes(x = d7r1, y = mean)) + geom_point() + xlim(1,5) 
 ```
 
 Of all the possible combinations this one seems the best to highlight
@@ -311,15 +312,13 @@ strong is your interest in politics in various domains
 EXPERIENCED DISCRIMINATION
 
 For the questions about whether you have experienced discrimination
-`qc2_` I am keeping only `qc2_15` which is a binary on whether you have
-experienced any discrimination or not and I am not keeping the other
+`qc2_` we are keeping only `qc2_15` which is a binary on whether you have
+experienced any discrimination or not. We do not include the other
 categories that allowed us to understand if you had experienced
-discrimination on the basis of a particular motive. We can probably
-assume that if a person is a part of a specific minority (info from
-`sd2`) and is being discriminated is because of being part of that
-minority (at least in most cases), therefore it felt like information we
-already had (and which we can easily put in our regression using
-interaction effects)
+discrimination on the basis of a particular motive. There are data quality 
+issues with these variables and we can infer that if a person is a part of a 
+specific minority (info from `sd2`) and is being discriminated, it is due to 
+that minority status (at least in most cases).
 
 <br>
 
@@ -327,12 +326,10 @@ PERCIEVED DISCRIMINATION in country
 
 This is a question (`qc1`) about how widespread you perceived
 discrimination is in your country. It is a rather peculiar question
-because it asks individuals for perception at the country level. I think
-it might be more useful (by aggregating results by country) to use it to
-build a country level indicator of perceived discrimination against
-certain minorities that are of our interest rather than use it as an
-individual level variable. So I will keep them out of the dataset for
-now
+because it asks individuals for perception at the country level. 
+Due to the nature of mixed modelling, we have prioritised using the EU survey 
+to create individual level discrimination measures. The country level measures
+are captured in that country level data.
 
 For the same reason I am also discarding `qc4` that asks whether in your
 country you feel like candidates with certain characteristics would be
@@ -346,19 +343,20 @@ towards reducing discrimination are effective in your country.
 
 HOW DISCRIMINATORY ARE YOU SCORE
 
-I use `qc12` and `qc13` to build a score from 1 to 10 of how
-discriminatory are you against certain minorities. I am building the
+We use `qc12` and `qc13` to build a score from 1 to 10 of how
+discriminatory are you against certain minorities. We build the
 score for each minority and then we can decide later if some are
 irrelevant.
 
 Note for some categories this score is a bit stupid (ex. voting for
 whether you would feel uncomfortable if your child was in a love
-relationship with a old person would give you a high racist score
+relationship with a old person would give you a high discrimination score
 against old people, this is an example of some of the categories for
 which it is worth excluding the index)
 
-We can also further aggregate to obtain just one score (or obtain
-religious/ethnic score etc.).
+We aggregate these into scores for discrimination (e.g.religious/ethnic score 
+etc.). When required, we can further aggregate to obtain just one score 
+measuring individual discrimination. 
 
 `qc6` also asks about discriminatory behaviors, but is about elected
 public official, it does not ask about a situation that impacts you
@@ -372,7 +370,7 @@ SUPPORTIVE OF LGBTQ RIGHTS INDEX
 Using `qc15` we can again build an index for how supportive of lgbtq
 rights a person is.
 
-I again choose to take the mean across the different answers but we
+We again choose to take the mean across the different answers but we
 could also use median/mode if we think is better
 
 We could also use `qc18` to try to capture anti lgbtq sentiment, but I
@@ -383,18 +381,21 @@ preferred `qc15` as it seemed more straightforward (I therefore deleted
 
 MY VOICE COUNTS
 
-I guess that people that feel alienated from society and politics might
-be less likely to support lgbtq rights so I took the mean of `d72`
-question which asked whether you felt like your voice mattered.
+We have used this as a proxy for social alienation. We hypothesised that people 
+who feel alienated from society and politics might be less likely to support 
+lgbtq rights so we took the mean of the two subquestions in `d72`, which
+ask whether you felt like your voice mattered.
 
 <br>
 
 OTHERS
 
-`qc11` is a strange question feels useless to me, I removed it.
+`qc11` (willingness to provide information) is a strange question feels useless to me, I removed it.
 
 I also removed `qc9` as I don't really know what to do with it and
 `qc17`.
+
+Here we select our initial variables of interest from the above discussion. 
 
 ```{r}
 data <- data_raw |> 
@@ -434,7 +435,7 @@ paradata <- data_raw |>
          p2, p3, p3r, p4, p5) # paradata)
 ```
 
-Removing some of the previously selected variables
+Removing some of the disaggregrated questions
 
 `sd2_7` to `sd2_10`, these are possible answer deemed irrelevant to the
 question about yourself being part of the following minorities: `sd2_7`
@@ -474,6 +475,8 @@ Most columns do not have explicit NAs:
 ```{r, fig.height=6}
 plot_missing(data)
 ```
+
+### Extract data labels
 
 Exploiting the fact that the .dta files has attributes (labels) for all
 its columns.
@@ -534,7 +537,9 @@ data <- data |>
 
 <br>
 
-Separating variables for which I can use the attribute labels to
+### Recode all factor NA's
+
+Separating variables for which we can use the attribute labels to
 factorize them and the variables for which this strategy cannot be used
 
 ```{r}
@@ -586,6 +591,8 @@ data <- data |>
 ```
 
 <br>
+
+### Create new individual level measures
 
 Dealing with the other variables on which we do some further
 pre-processing (feature engineering).
@@ -640,7 +647,7 @@ data <- data |>
   select(-starts_with("qc13"))
 ```
 
-I am deleting the discrimination index against young and old people. This is because one of the question is: how comfortable you would feel if one of your children was in a love relationship with a person from group x. It is totally acceptable that people would not feel comfortable with their kid dating an old person without that meaning that they are being discriminatory against old people.
+We delete the discrimination index against young and old people. This is because one of the question is: how comfortable you would feel if one of your children was in a love relationship with a person from group x. We don't believe these are relevant to our target or discrimination score. 
 
 ```{r}
 data <- data |> 
@@ -813,7 +820,7 @@ data |> count(religion)
 
 In this section we will convert all levels of factors that are redundant to NAs.
 
-First we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer it's equivalent to not knowing his or her answer. We exclude `friends_trans` because for that category it could be worth analyzing refusals.
+First we will substitute de "Refusal" answers in the remaining variables as NAs. If the respondent refuses to answer, we treat is as equivalent to not knowing his or her answer. We exclude `friends_trans` because for that category it could be worth analyzing refusals.
 
 ```{r}
 factor_variables <- names(data)[sapply(data, is.factor)]
@@ -953,15 +960,15 @@ ggplot(data_summary, aes(x = gender, y = percentage, fill = trans_docs)) +
     axis.ticks.x = element_blank()
   )
 
-# Crear una tabla de contingencia
+# Create contingency table
 contingency_table <- table(data$gender, data$trans_docs)
 
-# Realizar la prueba de chi-cuadrado
+# Calculate chisquare test
 chisq_test <- chisq.test(contingency_table)
 print(chisq_test)
 ```
 
-Men exhibit a lower percentage of favorable or don't knoe responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
+Men exhibit a lower percentage of favorable or don't know responses and a higher rate of rejection compared to women. There is a statistically significant association between gender and our target variable, being women more supportive
 
 #### Age
 
@@ -1028,19 +1035,47 @@ We see that differences among age groups are not so evident anymore.
 
 We have two variables related to religiosity: `religion` (the religious affiliation professed by the respondent) and `religious_minority` (whether or not the respondent belongs to a religious minority group).
 
-For the first one it's better to show a cross table instead of a plot, since there are a lot of categories.
-
 ```{r}
-CrossTable(data$religion, data$trans_docs,
-           digits = 2, 
-           expected = FALSE, 
-           asresid = TRUE, 
-           chisq = TRUE, 
-           prop.chisq = FALSE, 
-           format = "SPSS")
-```
+data_summary <- data |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
+  mutate(religious_minority = fct_recode(religious_minority, "Yes" = "1", "No" = "0")) |> 
+  count(trans_docs, religion, name = "n") |> 
+  group_by(religion) |>  
+  mutate(percentage = n / sum(n))
 
-The extremely small p-value confirms that the relationship between `religion` and `trans_docs` is highly statistically significant.
+ggplot(data_summary, aes(x = reorder(religion, ifelse(trans_docs == "Yes", -percentage, 0)), y = percentage, fill = trans_docs)) +
+  geom_bar(stat = "identity", position = "fill") +
+  geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_stack(vjust = 0.5), size = 4) + 
+  scale_y_continuous(labels = percent_format()) + 
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
+  ) +
+  labs(
+    title = "Support for the right of trans people to change their gender in civil documents",
+    x = "Are you part of a religious minority?",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  coord_flip() +  
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+# Create contingency table
+contingency_table <- table(data$religion, data$trans_docs)
+
+# Calculate chisquare test
+chisq_test <- chisq.test(contingency_table)
+print(chisq_test)
+
+```
+The small p-value confirms that the relationship between `religion` and `trans_docs` is statistically significant. We see that non-believers are most likely to support the rights, while people who are Orthodox Christian and Muslim are most likely to oppose the rights. They are also most likely to not provide a don't know response.
+
+We then run for the religious minority question (sd2_2). This provides us with less clear results. 
 
 ```{r}
 data_summary <- data |> 
@@ -1075,7 +1110,7 @@ ggplot(data_summary, aes(x = religious_minority, y = percentage, fill = trans_do
 
 #### Ideology
 
-```{r}
+```{r, warning=FALSE}
 data_summary <- data |> 
   mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
   count(trans_docs, left_right, name = "n") |> 
@@ -1107,7 +1142,7 @@ ggplot(data_summary, aes(x = left_right, y = percentage, fill = trans_docs)) +
 
 Stronger left-wing support for trans rights. Right-wing respondents are
 the most divided, with high opposition levels. Non-responses are highest
-among those without ideological alignment.
+among those without ideological alignment and right leaning respondents. 
 
 #### Social class
 
@@ -1150,13 +1185,40 @@ lack of support and no response are higher for lower-class individuals.
 #### Education
 
 ```{r}
-ggplot(data, aes(x = trans_docs, y = years_edu)) +
-  geom_violin() +
-  labs(x = "Support for trans people changing their civil documents", y = "Age when stopped full-time education") +
-  ggtitle("Distribution of support by education")
+# limit to main age ranges in age completed
+data |> 
+  mutate(main_educ = ifelse(between(years_edu, 15, 30), 1, 0)) |> 
+  group_by(main_educ) |> 
+  summarise(count = n(),
+            prop = count/nrow(data)*100)
+
+data |> 
+  filter(between(years_edu, 15, 30)) |> 
+  mutate(trans_docs = fct_na_value_to_level(trans_docs, "Don't Know")) |>
+  count(trans_docs, years_edu, name = "n") |> 
+  group_by(years_edu) |>  
+  mutate(percentage = n / sum(n)) |> 
+  ggplot(aes(x = years_edu, y = percentage, fill = trans_docs)) +
+      geom_bar(stat = "identity", position = "fill") +
+    geom_text(aes(label = scales::percent(percentage, accuracy = 1)),  
+            position = position_stack(vjust = 0.5), size = 3) + 
+  scale_y_continuous(labels = percent_format()) + 
+  scale_fill_manual(
+    values = c("Yes" = "#2ECC71", "No" = "#E74C3C", "Don't Know" = "#3498DB")
+  ) +
+  labs(
+    title = "Distribution of support by education",
+    x = "Age completed education, from 15 to 30 years old",
+    y = "Proportion of Responses",
+    fill = "Support the right"
+  ) +
+  theme_minimal()+
+  theme(
+    panel.grid = element_blank())
+
 ```
 
-Support doesn't seem to be related to education.
+Limiting the data top only look at support around the main education. Which includes around 87% of the observations, we see a less clear relationship between age finishing education and support. However those who appear to finish education before age 20 tend to have higher opposition. 
 
 #### Area of residence
 
@@ -1343,7 +1405,7 @@ CrossTable(merged_paradata$p4, merged_paradata$trans_docs,
 
 ```
 
-The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents
+The table shows a significant association between the number of people present during the interview and support for transgender people to change their documents. The actual support does not vary too much though, they are all within 3% of each other.  
 
 ### Duration of interview
 
@@ -1360,6 +1422,8 @@ CrossTable(merged_paradata$p3r, merged_paradata$trans_docs,
            format="SPSS")
 
 ```
+
+It appears that the longer the interview, the more likely to support the people are. The highest support being 75-89 minutes while the highest opposition and and highest DK were in <15 minute interviews. 
 
 ### Respondent cooperation
 
@@ -1394,7 +1458,9 @@ ggplot(data_summary, aes(x = p5, y = percentage, fill = trans_docs)) +
 ```
 
 Respondents who engaged better in the survey were more likely to express
-support.
+support. This is the most clear paradata relationship. 
+
+Low cooperation had higher DK response and opposition to trans documents support. 
 
 # Correlation and multicollinearity
 
@@ -1574,8 +1640,7 @@ dk_target |>
 
 If all NA responses to the target are removed, this is how much the
 "Yes" count increases for each of our countries. We see this is not
-proportional. This is a statistical phenomenon. distribution of the
-variable looks by country. The NA vote removal, makes our differences in
+proportional and the NA vote removal makes our differences in
 Yes/No differences appear larger.
 
 ```{r}
@@ -1717,14 +1782,12 @@ interpretation of countries as that is covered above):
 
 -   Anti-lgbti rights people were about 10% more likely to not respond
 
--   Internet use was significant but is not interpertable. If you had
-    not used the internet (higher NA likelihood) or used it 2-3 times a
-    week (lower NA likelihood) compared to everyday use
+-   Internet use was significant, those who had not used the internet or did
+    not have access, were less likely to respond compared to those who use 
+    the internet everyday. 
 
--   Social class was significant at all levels, compared to the working
-    class, you were more likely to not respond to our target variable if
-    you reported being in the lower middle, middle or upper middle
-    class. I.e. working class were less likely to answer this question.
+-   Social class was significant at all levels, this means the working
+    class were more likely to NA respond than all other class levels. 
 
 <br>
 
@@ -1771,12 +1834,21 @@ under <- ovun.sample(target_NA~.,
 
 table(under$target_NA)
 
-#run the rf model 
+#run a rf model to see how much of the NA values we can explain
 rfunder <- randomForest(target_NA~., data=under)
 rfunder
+
+# check a simple logistic model oucomes for undersampled data
+broom::tidy(glm(target_NA ~., 
+                data = under, 
+                family="binomial")) |> 
+  filter(p.value<0.05) |> 
+  mutate(oddsratio = exp(estimate)) |> 
+  select(term, oddsratio, p.value)
+
 ```
 
-We see that only around 5% of the variance is explained.
+We see that only around 5% of the variance is explained through RF. However The undersampled data with a simplified dataframe finds that higher DK were associated with being anti lgbti rights, less frequent internet use and being working class. This is all useful to compare to overall response rates. 
 
 ### Testing the NA values against paradata
 
@@ -1844,16 +1916,14 @@ more likely to respond. This increases with lacking cooperation. If
 cooperation was fair, there was around 40% more chance of NA, if
 cooperation was average, around 75% higher chance of NA. If cooperation
 was bad, there was about 350% higher chance of a NA response to our
-target variable.
+target variable. This variable also has risk of reverse causality, as higher 
+NA respose is likely a reason to be rated as low cooperation. 
 
-Overall, the correlations with our target variables are low which means
-we don't have a major concern. Some are interesting e.g. interview
-cooperation. The worse the cooperation, the more likely to not respond
-to the question. This could be underreporting No votes, because as we
-saw in the descriptive analysis, the worse the cooperation, the higher
-the No vote for supporting trans_docs. There could also be some reverse
-causality, as not responding leads to a worse cooperation score. But the
-odds ratios here are very high.
+Overall, this section found that people more likely to respond NA
+seems similar to those more likely to oppose trans rights to change papers. 
+So there is some risk of under reporting of true support if people opposed are not 
+responding. This is likely capturing some social desirability as people don't 
+want to appear discriminatory and hide their true views. 
 
 # Imputing missing data
 
@@ -2289,7 +2359,6 @@ complete_df <- complete_df |>
 str(complete_df)
 ```
 
-
 ## Mixed model
 
 Random Intercept Model:
@@ -2341,11 +2410,13 @@ To model, we will follow: Approach to multilevel model building based on Hox (20
 5/ (Cross-level) interactions
 
 Each step, check whether your model is significantly improved compared
-to the previous one.
+to the previous one. We are actually aggregating step 4 and 5 due to computational times.
 
 Adjusted ICC: The proportion of total variance explained by the grouping structure (random effects), adjusted to include the variance explained by the fixed effects
 
 Unadjusted ICC: The proportion of total variance explained by the grouping structure (random effects), excluding any variance explained by the fixed effects in the model
+
+#### Mixed model 1 - null model country level random effects only
 
 ```{r, message=FALSE}
 complete_df <- complete_df |> 
@@ -2379,8 +2450,13 @@ auc(scaled_df$trans_docs, predicted_probs)
 # ICC
 performance::icc(glmer_step1)
 ```
+The AUC here measures the models ability to determine trans_docs by country only differences. The AUC of 0.7405 shows just using country, you have better than random prediction (which would be 0.6 given that our class balances is 60% Yes and 40% No). 
 
-...
+The ICC represents the proportion of variance in trans_docs attributable to differences between countries. The value of 0.227 shows that country is a significant variable, but indiviudal level varibles must be included to make this a properly good explanatory model. 
+
+The AIC (28212) can be used for model performance later. If AIC reduces, the other models are improvments. 
+
+#### Mixed model 2 - adding in individual-level fixed effects 
 
 ```{r, message=FALSE}
 # Random intercept + individual fixed effects
@@ -2394,8 +2470,6 @@ glmer_step2 <- glmer(trans_docs ~ age + gender + social_class +
                      family = binomial(link="logit"))
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step2))
-# Random intercepts coefficients
-ranef(glmer_step2)
 # AIC
 AIC(glmer_step2)
 # AUC
@@ -2409,10 +2483,16 @@ performance::icc(glmer_step2)
 anova(glmer_step1, glmer_step2)
 ```
 
-...
+After adding in the indiviudal level fixed effects, we see:
+
+The model is improved. We have a significantly reduced AIC (23612) and also see improved AUC (up to around 0.84 to show classification power)
+
+The ICC has reduced, this indicates that the indiviudual level variables are now explaining some of the variance previously explained by the country level variable.
+
+#### Mixed model 3 - adding in country-level fixed effects 
 
 ```{r, message=FALSE}
-# Random intercept + individual and country fixed effects
+# Random intercept + individual fixed effects + country fixed effects
 glmer_step3 <- glmer(trans_docs ~ age + gender + social_class +
                        ethnic_minority + suffered_discr + 
                        friends_trans + antilgbtq_rights +
@@ -2425,8 +2505,6 @@ glmer_step3 <- glmer(trans_docs ~ age + gender + social_class +
                      family = binomial(link="logit"))
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step3))
-# Random intercepts coefficients
-ranef(glmer_step3)
 # AIC
 AIC(glmer_step3)
 # AUC
@@ -2438,7 +2516,35 @@ performance::icc(glmer_step3)
 anova(glmer_step1, glmer_step2, glmer_step3)
 ```
 
-...
+In this model, when including country level fixed effects too, we see:
+
+An overfitted model compared to step 2 (indiviudal fixed effects). 
+
+A better model compared to step 1 (null).
+
+The model is overfitted because performance and predictive power do not improve comapred to step 2 but we have additional variables. The AUC is equivalent while the AIC has increased (indicating worse overall model fit). Although we are adding complexity the model is not getting better.
+
+#### Mixed model 4 - adding in cross-level interactions and random slopes 
+
+This final mixed model includes cross-level interactions between individual and country level data. The following interactions are included in our models:
+
+`right_wing:lgbt_policy_index`: Tests whether the effect of individual political ideology varies based on a country's LGBT policy environment. The relationship between conservative views and trans attitudes might be weaker in countries with strong LGBT protections.
+
+`social_class:gdp_pc_ppp`: Tests whether social class effects differ across countries with varying economic development.
+
+`gender:gender_inequality_index`: Tests how the relationship between being female and attitudes toward transgender people varies depending on the level of gender inequality in their country.
+
+`gender:lgbt_policy_index`: Tests how the relationship between an individual's gender and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
+
+`age:gdp_pc_ppp`: Tests how the relationship between an individual's age and their attitudes toward transgender people varies depending on the economic development level of their country.
+
+`non_believer:democracy_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the democratic context of their country.
+
+`non_believer:gender_inequality_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the level of gender inequality in their country
+
+`unhappy:lgbt_policy_index`: Tests how the relationship between an individual's unhappiness (or life dissatisfaction) and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
+ 
+`poor:democracy_index`: Tests how the relationship between an individual's economic status (being poor) and their attitudes toward transgender people varies depending on the democratic context of their country.
 
 ```{r, message=FALSE}
 # Adding random slopes and cross level interaction
@@ -2468,10 +2574,13 @@ glmer_step4 <- glmer(trans_docs ~
                        democracy_index |country),
                      data = scaled_df,
                      family = binomial(link="logit"))
+```
+
+Run the diagnostics: 
+
+```{r, message=FALSE}
 # Printing coefficients
 nice_table(broom.mixed::tidy(glmer_step4))
-# Random intercepts coefficients
-ranef(glmer_step4)
 # AIC
 AIC(glmer_step4)
 # AUC
@@ -2495,27 +2604,118 @@ plot.roc(scaled_df$trans_docs, predicted_probs,
          print.thres="best")
 ```
 
-`right_wing:lgbt_policy_index`: Tests whether the effect of individual political ideology varies based on a country's LGBT policy environment. The relationship between conservative views and trans attitudes might be weaker in countries with strong LGBT protections.
+This model, although computationally expensive, is a marginal improvement on the previous best model (model 1, individual fixed effects). The model fit has improved.  We see that in this full model, the AIC dropped to 23606. However, the BIC increased from the model 1, so that does create some uncertainty. 
 
-`social_class:gdp_pc_ppp`: Tests whether social class effects differ across countries with varying economic development.
+The predictive power actual increases very very marginally. The AUC increases from 0.8389 to 0.8394 in the full model. This may indicate the predictive power is maximised around 84%, given such minor improvements, the model with only individual level fixed effects is preferred. 
 
-`gender:gender_inequality_index`: Tests how the relationship between being female and attitudes toward transgender people varies depending on the level of gender inequality in their country.
+We have an accuracy 0.76. The model is better at identifying negatives than positives since specificity (83.11%) is higher than sensitivity (68.65%), indeed the AUC graph suggests changing the threshold to around 0.4 from 0.5 so as to better balance those two metrics
 
-`gender:lgbt_policy_index`: Tests how the relationship between an individual's gender and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
+##### Cross-level effects 
 
-`age:gdp_pc_ppp`: Tests how the relationship between an individual's age and their attitudes toward transgender people varies depending on the economic development level of their country.
+When looking at just the cross-level effects, the significant relationships and the direction of the relationship were: 
 
-`non_believer:democracy_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the democratic context of their country.
+right_wing × lgbt_policy_index (negative)
 
-`non_believer:gender_inequality_index`: Tests how the relationship between being religious and attitudes toward transgender people vary depending on the level of gender inequality in their country
+genderWoman × lgbt_policy_index (positive)
 
-`unhappy:lgbt_policy_index`: Tests how the relationship between an individual's unhappiness (or life dissatisfaction) and their attitudes toward transgender people varies depending on the LGBTQ policy environment of their country.
- 
-`poor:democracy_index`: Tests how the relationship between an individual's economic status (being poor) and their attitudes toward transgender people varies depending on the democratic context of their country.
+non_believer × democracy_index (negative)
+
+non_believer × gender_inequality_index (negative)
+
+These effects are interpreted as the relationships between an individual-level variable and the outcome variable changes depending on the value of a country-level variable.
+
+For the right wing x lgbti policy variable, as the coefficient is negative, we infer that the effect of being right wing is weaker in countries with better lgbti policies. So more mild right wing opposition to transgender documentation occurs in more progressive countries (those with stronger lgbti views). This makes sense and maybe helps capture some of the political opinion subjectivity between individuals in differenet countries. 
+
+For the women x lgbti policy variable, suggests that the effect of being a women in countries with stronger lgbti policies is stronger. Basically meaning that women tend to be more supportive of transgenders' rights in countries with more inclusive lgbtq policies
+
+For non-believer x democracy index and non-believer x gender inequality index, both are negative. This implies that non-religious people are less likely to support transgenders’ rights in countries where there is higher gender inequality. This also implies that the effect of being a non-religious on support for trans rights is weaker in more democratic countries. Although this might sound counterintuitive, this could align with more democratic having lower levels of religiosity, and thus religion in general playing a lower impact on determining whether one supports or not transgenders' people rights. 
 
 ### Interpreting results
 
-...
+The best model is the full model with all of the individual-level, country-level and cross-level effects included. However the gains are very marginal from the previous best model. The final model with cross-level effects is very computationally expensive and offers little improvement on the more simple model. So depending on needs, the model 1 may be the better option due to simplicity in interpretation and efficiency of computation. 
+
+It is also worth noting that ICC coefficients are quite low across all the models and that country-level fixed effects are not significant. This suggests that most of the variation is explained at the individual level rather than at the country level.
+
+#### Key variables 
+
+The key individual-level variables in the models that are significant include most of the variables that we had already individuated before.
+
+In particular women, people who use internet every day, people that are non-religious and people that know a transgender person tend to be more supportive. On the contrary males, people from ethnic minorities, unhappy people and right-wing people tend to oppose transgender rights more. Our discriminatory scores also seem always relevant with people being more discriminatory against minorities being less supportive of the right in question proving to be good index of discriminatory attitudes. 
+
+Perhaps counterintuitively, but consistent with our previous findings, age has a positive coefficient meaning that older people tend to be more supportive. Interpretation of this finding is difficult as our bivariate descriptive analysis seems to contradict this.
+
+#### Model classification power
+
+Here we can show the distribution of our preferred model, with random slopes for country and fixed individual effects. 
+
+```{r, warning=FALSE}
+# summarise predictions
+prediction_summary <- scaled_df |> 
+  select(trans_docs, 
+         country) |> 
+  mutate(m1preds = predict(glmer_step1),
+         m1_model_pred = ifelse(m1preds > 0.5, 1, 0),
+         m2_preds = predict(glmer_step2),
+         m2_model_pred = ifelse(m2_preds > 0.5, 1, 0),
+         m3_preds = predict(glmer_step3),
+         m3_model_pred = ifelse(m3_preds > 0.5, 1, 0),
+         m4_preds = predict(glmer_step4), 
+         m4_model_pred = ifelse(m4_preds > 0.5, 1, 0))
+
+# calculate rates for each model at country level and pivot longer
+summary_table <- prediction_summary %>%
+  select(trans_docs, country, m1_model_pred, m2_model_pred, 
+         m3_model_pred, m4_model_pred) |>
+  group_by(country) %>%
+  summarise(
+    actual_rate = mean(trans_docs)*100,
+    m1_rate = mean(m1_model_pred)*100,
+    m2_rate = mean(m2_model_pred)*100,
+    m3_rate = mean(m3_model_pred)*100,
+    m4_rate = mean(m4_model_pred)*100)
+
+#plot all of the model estimates on a graph
+# with unpivoted data
+summary_table %>%
+  mutate(
+    model_1 = "Model 1 (null model = country random intercept)",
+    model_2 = "Model 2 (+individual fixed)",
+    model_3 = "Model 3 (+country fixed)",
+    model_4 = "Model 4 (+cross-level & country random slope)"
+  ) %>%
+  ggplot(aes(x = reorder(country, -actual_rate), y = actual_rate)) +
+  geom_col(alpha = 0.5) +
+  geom_point(aes(y = m1_rate, color = model_1),
+             size = 3, shape = 18,
+             position = position_nudge(x = -0.3)) +
+  geom_point(aes(y = m2_rate, color = model_2),
+             size = 3, shape = 15,
+             position = position_nudge(x = -0.1)) +
+  geom_point(aes(y = m3_rate, color = model_3),
+             size = 3, shape = 16,
+             position = position_nudge(x = 0.1)) +
+  geom_point(aes(y = m4_rate, color = model_4),
+             size = 3, shape = 17,
+             position = position_nudge(x = 0.3)) +
+  scale_color_manual(name = "Mixed model Type",
+                       values = c("Model 1 (null model = country random intercept)" = "blue",
+                                  "Model 2 (+individual fixed)" = "red",
+                                  "Model 3 (+country fixed)" = "green",
+                                  "Model 4 (+cross-level & country random slope)" = "purple")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5),
+        axis.title.x = element_blank())+
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  labs(title = "Comparing explantory mixed models classification power",
+       y = "Proportion of support",
+       x = "Countries, ordered by actual support") +
+  theme_minimal()+
+  theme(panel.grid = element_blank(),
+        legend.position = c(0.98, 0.98),  # Adjust coordinates for top right
+        legend.justification = c("right", "top"),
+        legend.background = element_rect(fill = "white", color = "gray"))
+```
+
+From this section we can see that the 3 GLM models are very similar. The step 2 (red) and step 3 (green) models are indistinguishable. There is some small difference in country level classification power to the step 4 cross-level effects if you look very closely on some countries. However, these models have similar trends. They classify observations that have a more even split of support. While the countries with more extreme support/opposition provide a class imbalance challenge for the explanatory model, worsening its results.  
 
 # Predictive model
 
@@ -2579,7 +2779,7 @@ data_dummy <- final_data %>%
                 .names = "{.col}_num"))
 ```
 
-I converted factors with 2 levels to numerical 0-1 so we can compute their means.
+We convert factors with 2 levels to numerical 0-1 so we can compute their means.
 
 ```{r}
 # Country means
@@ -2663,10 +2863,11 @@ data_aggr <- data_aggr |>
 dim(data_aggr)
 ```
 
-
 The resulting data frame has 28 observations and 79 variables. 
 
 ## Linear regression with Elastic Net
+
+Model output compared below in predictive model performance section. 
 
 ```{r}
 data_models <- data_aggr |> 
@@ -2697,11 +2898,12 @@ elastic_net_model <- train(
 )
 
 # Display the best alpha and lambda values
-print(elastic_net_model)
 elastic_net_model$bestTune
 ```
 
 ## Random forest
+
+Model output compared below in predictive model performance section. 
 
 ```{r, message=FALSE}
 set.seed(123)
@@ -2730,13 +2932,14 @@ rf_model <- train(
 )
 
 # Results
-print(rf_model)
 plot(rf_model)
 rf_model$bestTune
 ```
 
 
 ## Gradient boosting
+
+Model output compared below in predictive model performance section. 
 
 ```{r, message=FALSE}
 set.seed(123)
@@ -2762,11 +2965,12 @@ gbm_model <- train(
   tuneGrid = gbm_grid,
   verbose = FALSE)
 
-print(gbm_model)
 gbm_model$bestTune
 ```
 
-## Comparing predictions
+## Predictive model performance 
+
+Here we analyse the benchmark model and 3 predictive models. We aggregate all the performance metrics in this section and provide commentary afterwards on what the best model is. 
 
 ```{r}
 # Adding benchmark (mean)
@@ -2824,31 +3028,64 @@ model_metrics <- rbind(
 print(model_metrics)
 ```
 
-We are able to predict so good partially because this is a set of observations which share many characteristics among them. Due to this low number of observations we are able to run LOOCV which yields amazing results. However, we should treat these results carefully, as the limited number of observation and such high performance metrics suggest that our models are prone to overfitting. Again this is mostly due to having few and similar observations, hence we are able to predict really well among those observations, but the generizability power of our model is quite low. We would need many more and many more diverse countries in our training dataset to build a model which could be applicable even outside Europe.
+By using just the mean of our target variable as a prediction we can see that the mean absolute error is 0.17. It means that by using the mean we are going to be off by 17% points on average, this provides a really good benchmark to understand the results. 
+
+<br>
+
+We are able to predict so good partially because this is a set of observations which share many characteristics among them. Furthermore, due to the low number of observations in our data we are able to run LOOCV which yields amazing results. However, we should treat these results carefully, as the limited number of observation and such high performance metrics suggest that our models are prone to overfitting. Again this is mostly due to having few and similar observations, hence we are able to predict really well among those observations, but the generizability power of our model is quite low. We would need many more and many more diverse countries in our training dataset to build a model which could be applicable outside of Europe.
 
 ```{r}
 # Sort predictions by actual values (descending)
 sorted_predictions <- all_predictions[order(all_predictions$actual, decreasing = TRUE), ]
 
 # Print sorted predictions
-print(sorted_predictions[, c("country", "actual", "benchmark", "elastic_net", "random_forest", "gradient_boosting")])
+print(sorted_predictions[, c("country", "actual", "elastic_net", "random_forest", "gradient_boosting")])
+```
 
-# Visualize predictions across countries
+It seems that random forests and elastic net struggle more in predicting extreme values of our target variable. The range of true values of our target variable goes from 15% to 90%, elastic net predictions only range within 20% and 85%, while random forests' predictions even worse, they range between 25% and 82%. Gradient boosting instead is able to predict better those extreme values and it seems that in this lies its better predictive performance.
+
+```{r, warning=FALSE}
+#plot all of the model estimates on a graph
+ggplot(sorted_predictions, aes(x = reorder(country, -actual), 
+                               y = actual)) +
+  geom_col(alpha = 0.5) +
+  geom_point(aes(y = elastic_net , color = "Elastic Net"),
+             size = 3, shape = 15,
+             position = position_nudge(x = -0.1)) +
+  geom_point(aes(y = random_forest, color = "Random Forest"),
+             size = 3, shape = 16,
+             position = position_nudge(x = 0.1)) +
+  geom_point(aes(y = gradient_boosting, color = "Gradient Boosting"),
+             size = 3, shape = 17,
+             position = position_nudge(x = 0.3)) +
+  geom_hline(aes(yintercept = mean(actual), 
+                 color = "Benchmark (mean)"), 
+           linetype = "dashed", linewidth = 0.7) +
+  scale_color_manual(name = "Model Type",
+                   values = c("Benchmark (mean)" = "black",
+                              "Elastic Net" = "red",
+                              "Random Forest" = "green",
+                              "Gradient Boosting" = "purple")) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5),
+        axis.title.x = element_blank())+
+  scale_y_continuous(labels = percent_format(scale = 1)) +
+  labs(title = "Comparing predictive models regression results",
+       y = "Proportion of support",
+       x = "Countries, ordered by actual support") +
+  theme_minimal()+
+  theme(panel.grid = element_blank(),
+        legend.position = c(0.98, 0.98),
+        legend.justification = c("right", "top"),
+        legend.background = element_rect(fill = "white", color = "gray"))
+```
+
+We can see again how gradient boosting is almost always perfect, while random forest and elastic net alternate themselves for the second best moel depending on the country.
+
+```{r}
 # Reshape the data for plotting
-
 plot_data <- sorted_predictions %>%
-  select(country, actual, elastic_net, random_forest, gradient_boosting) %>%
-  gather(key = "model", value = "prediction", -country, -actual)
-
-# Create plot
-ggplot(plot_data, aes(x = reorder(country, -actual), y = prediction, fill = model)) +
-  geom_bar(stat = "identity", position = position_dodge()) +
-  geom_point(aes(y = actual), color = "black", size = 2) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  labs(title = "Model Predictions vs Actual Values by Country",
-       x = "Country", y = "Proportion Supporting Trans Document Changes") +
-  scale_fill_brewer(palette = "Set1")
+  select(country, actual, benchmark, elastic_net, random_forest, gradient_boosting) %>%
+  pivot_longer(cols = -c(country, actual, benchmark), names_to = "model", values_to = "prediction")
 
 # Create a scatterplot of actual vs predicted for each model
 ggplot(plot_data, aes(x = actual, y = prediction, color = model)) +
@@ -2866,6 +3103,10 @@ all_predictions$best_model <- apply(all_predictions[, c("elastic_error", "rf_err
 # Count how many countries each model performed best on
 table(all_predictions$best_model)
 ```
+
+Overall, the gradient boosting is the best models. The gradient boost model predicts better at the extreme values however i.e. countries with very high or very low support for the target variable. This is because of the class imbalance at these levels. 
+
+The random forest on the other hand, does not predict the more extreme country values as well. 
 
 ### Checks for overfitting in GBM
 
@@ -2887,6 +3128,8 @@ ggplot(residuals_df, aes(x = actual, y = gbm_residuals)) +
 
 ## Variables importance
 
+Commentary for all 3 models provided after the three plots. 
+
 Elastic Net:
 
 ```{r}
@@ -2901,7 +3144,6 @@ non0_coefficients <- data.frame(
   arrange(desc(abs(coefficient)))
 non0_coefficients
 ```
-
 
 Random Forest:
 
@@ -2937,4 +3179,40 @@ varImp(gbm_model, scale = F)$importance %>%
     theme_minimal()
 ```
 
-Most important variables comments...
+The variables that appear among the top 10 for importance in both random forest and gradient boosting include `gender_docs`, `antilgbtq_rights`, `roma_minority`, `occupation_Manual workers`, `lgbt_policy_index`, `left_right_(7-10) Right`, `mean_years_edu`. Of them, the first three also appear in the non-zero elastic net coefficients. They are consisted with what we had found before throughout all the modelling process. We opted to use only `antilgbtq_rights` and not `gender_docs` in the mixed models and we decided to use `ethnic_minority` instead of `roma_minority`, although it seems that we might have been better suited by the latter.
+
+These predictive models are able to extract valuable information from country-level indexes that were not significant in our predictive models such as `democracy_index` and `lgbt_policy_index`. They also suggests us that we should have maybe have included occupation as its level manual workers seems to be quite important. 
+
+Lastly machine learning methods (random forest and gradient boosting) make a positive use of `years_edu`, which is instead non relevant in Elastic Net and in all our previous model. This suggests us that the relationship between this variable and the target might not be linear and that to extract valuable information from this variable it would have been necessary to do some more feature engineering on it.
+
+Nonetheless, overall all the most relevant variables are coherent with theory and expectations and indeed many of them overlap with our previous findings. 
+
+# Conclusions
+
+After extensive variable selection, cleaning, feature-engineering and feature selection we were able to detect many of the most relevant variables in explaining differences among support levels for the right of transgender to change their gender on civil documents. 
+
+We built several logistic model culminating with a comprehensive logistic mixed model taking into account individual fixed effects, country fixed effects and cross level interactions. This model was only slightly better than much more computationally efficient and simpler models as most of the variance seemed to be explained through individual fixed effects. Nonetheless, it helped us gain even deeper insights into the nuances of support for transgenders' rights.
+
+We then aggregated all our variables to a country level and built predictive models to forecast support for the right to change gender on civil documents and obtained extremely accurate predictive models. Due to the low number of observations in our dataset, our models benefited from LOOCV, leading to impressive predictive performance. However, this also raises concerns about overfitting and limited generalizability beyond the European context. A larger and more diverse dataset would be necessary to enhance robustness and applicability.
+
+Across all the models, in summary, some factors that were related to supporting the policy included: 
+
+- being a women
+
+- knowing a transgender person
+
+- being non-religious
+
+- being an everyday internet user, 
+
+While some of the factors related to opposing the policy included: 
+
+- expressing anti-LGBTQ+ views
+
+- expressing more discriminatory views against minorities, 
+
+- having lower life satisfaction 
+
+- expressing a more right wing ideology. 
+
+We believe that most of these are logical connections to support a more progressive inclusion policy. 
