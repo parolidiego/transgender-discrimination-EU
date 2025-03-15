@@ -1,6 +1,6 @@
 # Survey_Assignment
  
-This repository contains the work done by Diego Paroli, Irene García-Espantaleón Arta, Bradley McKenzie, Candela Gómez Blanco for the group assignment for the Survey Research Methodology II course in the Master in Computational Social Sciences at Universidad Carlos III de Madrid.
+This repository contains the work done by Diego Paroli, Irene García-Espantaleón Artal, Bradley McKenzie, Candela Gómez Blanco for the group assignment for the Survey Research Methodology II course in the Master in Computational Social Sciences at Universidad Carlos III de Madrid.
 
 The assignment involved using Eurobarometer survey data along with country-level data to develop two models:
 
