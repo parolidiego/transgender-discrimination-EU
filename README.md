@@ -1,10 +1,10 @@
-# Survey_Assignment
+# Anlysis of discrimination against transgender in the EU
  
 This repository contains the work done by Diego Paroli, Irene García-Espantaleón Artal, Bradley McKenzie, Candela Gómez Blanco for the group assignment for the Survey Research Methodology II course in the Master in Computational Social Sciences at Universidad Carlos III de Madrid.
 
 The assignment involved using Eurobarometer survey data along with country-level data to develop two models:
 
-- An explanatory model to analyze the factors influencing support for the right of transgender people to change their gender on civil documents.
+- An explanatory model (mixed model with cross level interactions) to analyze the factors influencing support for the right of transgender people to change their gender on civil documents.
 
 - A predictive model to forecast support for this policy if introduced in additional countries.
 
