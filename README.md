@@ -1,4 +1,4 @@
-# Analyzing support for transgender people rights in the EU
+# Analyzing support for trans people rights across the EU
  
 This repository contains the work done by Diego Paroli, Irene García-Espantaleón Artal, Bradley McKenzie, Candela Gómez Blanco for the group assignment of the Survey Research Methodology II course in the Master in Computational Social Sciences at Universidad Carlos III de Madrid.
 
